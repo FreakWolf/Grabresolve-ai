@@ -1,0 +1,38 @@
+[
+  {
+    "driver_id": "DRIVER-4432",
+    "name": "Ahmad Tan",
+    "rating": 4.2,
+    "total_trips": 3420,
+    "complaints_last_30_days": 5,
+    "route_deviation_count": 8,
+    "region": "Singapore Central",
+    "vehicle": "Toyota Camry",
+    "status": "active",
+    "joined": "2023-03-15"
+  },
+  {
+    "driver_id": "DRIVER-1123",
+    "name": "Rajesh Kumar",
+    "rating": 3.8,
+    "total_trips": 1250,
+    "complaints_last_30_days": 12,
+    "route_deviation_count": 15,
+    "region": "Singapore East",
+    "vehicle": "Honda Civic",
+    "status": "under_review",
+    "joined": "2024-01-10"
+  },
+  {
+    "driver_id": "DRIVER-8876",
+    "name": "Lee Wei Ming",
+    "rating": 4.7,
+    "total_trips": 5600,
+    "complaints_last_30_days": 1,
+    "route_deviation_count": 2,
+    "region": "Singapore East",
+    "vehicle": "Hyundai Sonata",
+    "status": "active",
+    "joined": "2022-06-20"
+  }
+]

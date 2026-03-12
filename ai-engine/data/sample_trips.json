@@ -1,0 +1,92 @@
+[
+  {
+    "trip_id": "TRIP-99281",
+    "driver_id": "DRIVER-4432",
+    "rider_id": "RIDER-8821",
+    "service_type": "GrabCar",
+    "pickup": "MG Road, Singapore",
+    "dropoff": "Whitefield, Singapore",
+    "estimated_fare": 320,
+    "actual_fare": 450,
+    "estimated_distance_km": 18.5,
+    "actual_distance_km": 27.3,
+    "estimated_duration_min": 35,
+    "actual_duration_min": 52,
+    "route_deviation": true,
+    "surge_multiplier": 1.0,
+    "payment_method": "GrabPay",
+    "gps_data": {
+      "pickup_lat": 1.2931,
+      "pickup_lng": 103.852,
+      "dropoff_lat": 1.315,
+      "dropoff_lng": 103.928,
+      "route_waypoints": [
+        { "lat": 1.295, "lng": 103.86, "time": "10:32" },
+        { "lat": 1.3, "lng": 103.88, "time": "10:40" },
+        { "lat": 1.31, "lng": 103.9, "time": "10:50" },
+        { "lat": 1.32, "lng": 103.94, "time": "11:05" },
+        { "lat": 1.315, "lng": 103.928, "time": "11:22" }
+      ]
+    },
+    "timestamp": "2026-05-16T10:30:00Z",
+    "status": "completed"
+  },
+  {
+    "trip_id": "TRIP-88442",
+    "driver_id": "DRIVER-5521",
+    "rider_id": "RIDER-3345",
+    "service_type": "GrabCar",
+    "pickup": "Orchard Road",
+    "dropoff": "Bugis",
+    "estimated_fare": 25.6,
+    "actual_fare": 25.6,
+    "payment_method": "GrabPay",
+    "payment_status": "double_charged",
+    "transactions": [
+      { "txn_id": "TXN-001", "amount": 25.6, "status": "completed" },
+      { "txn_id": "TXN-002", "amount": 25.6, "status": "completed" }
+    ],
+    "timestamp": "2026-05-15T18:00:00Z",
+    "status": "completed"
+  },
+  {
+    "trip_id": "TRIP-77231",
+    "driver_id": "DRIVER-1123",
+    "rider_id": "RIDER-6678",
+    "service_type": "GrabCar",
+    "pickup": "Changi Airport T3",
+    "dropoff": "Marina Bay Sands",
+    "estimated_fare": 28.0,
+    "actual_fare": 45.0,
+    "estimated_distance_km": 22,
+    "actual_distance_km": 38,
+    "estimated_duration_min": 25,
+    "actual_duration_min": 50,
+    "route_deviation": true,
+    "gps_data": {
+      "deviation_detected": true,
+      "optimal_route_km": 22,
+      "actual_route_km": 38,
+      "deviation_percentage": 72.7
+    },
+    "timestamp": "2026-05-16T08:00:00Z",
+    "status": "completed"
+  },
+  {
+    "trip_id": "TRIP-44098",
+    "driver_id": "DRIVER-8876",
+    "rider_id": "RIDER-5543",
+    "service_type": "GrabCar",
+    "pickup": "Tampines Mall",
+    "dropoff": "Changi Business Park",
+    "driver_arrived_at": "2026-05-16T07:45:00Z",
+    "driver_wait_time_min": 0,
+    "rider_wait_time_min": 15,
+    "cancellation_time": "2026-05-16T07:45:00Z",
+    "cancellation_fee": 5.0,
+    "cancellation_by": "rider",
+    "driver_movement_after_accept": false,
+    "timestamp": "2026-05-16T07:30:00Z",
+    "status": "cancelled"
+  }
+]
