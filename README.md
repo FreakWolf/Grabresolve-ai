@@ -55,38 +55,34 @@ automate — it **thinks, reasons, and acts** like a senior support analyst.
 ## 🧠 Agent Logic & Architecture
 
 ### System Architecture:
-    
-┌─────────────────────────────────────────────────────────────┐
-│ GrabResolve AI │
-│ │
-│ ┌──────────┐ ┌──────────────┐ ┌──────────────────┐ │
-│ │ FRONTEND │ │ BACKEND │ │ AI ENGINE │ │
-│ │ (React) │◄──►│(Node/Express)│◄──►│(Python/FastAPI) │ │
-│ │ Port 3000│ │ Port 5000 │ │ Port 8000 │ │
-│ └──────────┘ └──────────────┘ └──────────────────┘ │
-│ │ │ │ │
-│ Dashboard In-Memory DB 5 AI Agents: │
-│ Ticket Queue Ticket Store • Classifier │
-│ Analytics Investigation • Investigator │
-│ Live Demo Results • Root Cause │
-│ • Resolution │
-│ • Prediction │
-│ │ │
-│ ┌─────────▼──────────┐ │
-│ │ Gemini 2.5 Flash │ │
-│ │ (LLM Reasoning) │ │
-│ └────────────────────┘ │
-│ │ │
-│ ┌─────────▼──────────┐ │
-│ │ Mock Data Layer │ │
-│ │ • Trip Database │ │
-│ │ • Driver Profiles │ │
-│ │ • Merchant Data │ │
-│ │ • GrabPay Records │ │
-│ │ • GPS/Route Data │ │
-│ │ • Policy Knowledge │ │
-│ └────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph "GrabResolve System"
+        direction LR
+        A["Frontend<br/>(React)<br/>Port 3000"]
+        B["Backend<br/>(Node/Express)<br/>Port 5000"]
+        C["AI Engine<br/>(Python/FastAPI)<br/>Port 8000"]
+    end
+
+    subgraph "AI Core"
+        direction TB
+        D["5 AI Agents<br/>- Classifier<br/>- Investigator<br/>- Root Cause<br/>- Resolution<br/>- Prediction"]
+        E["Gemini 2.5 Flash<br/>(LLM Reasoning)"]
+    end
+
+    subgraph "Data & State"
+        direction TB
+        F["Dashboard<br/>In-Memory DB<br/>Ticket Queue<br/>Ticket Store"]
+        G["Mock Data Layer<br/>- Trip Database<br/>- Driver Profiles<br/>- Merchant Data<br/>- GrabPay Records<br/>- GPS/Route Data<br/>- Policy Knowledge"]
+    end
+
+    A <-.-> B
+    B <-.-> C
+    C --> D
+    C --> F
+    D --> E
+    E --> G
+```
 
 
 ### Agent Brain (Reasoning Engine):
