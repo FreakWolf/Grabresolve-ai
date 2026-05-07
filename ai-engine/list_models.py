@@ -1,16 +1,35 @@
 """
-List all available Gemini models for your API key
+List available Amazon Nova models for the current API key.
 """
-import google.generativeai as genai
-from dotenv import load_dotenv
-import os
+import json
+import urllib.request
+import urllib.error
 
-load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+from config import NOVA_API_KEY, NOVA_BASE_URL, NOVA_TIMEOUT_SECONDS
 
-print("📋 Available Models:\n")
-for model in genai.list_models():
-    if 'generateContent' in model.supported_generation_methods:
-        print(f"  ✅ {model.name}")
 
-print("\n👆 Copy one of these model names for config.py")
+def main():
+    if not NOVA_API_KEY:
+        raise SystemExit("NOVA_API_KEY is missing")
+
+    request = urllib.request.Request(
+        f"{NOVA_BASE_URL.rstrip('/')}/models",
+        headers={"Authorization": f"Bearer {NOVA_API_KEY}"},
+        method="GET"
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=NOVA_TIMEOUT_SECONDS) as response:
+            body = json.loads(response.read().decode("utf-8"))
+            for item in body.get("data", []):
+                print(f"{item.get('id')} | owned_by={item.get('owned_by')} | type={item.get('type')}")
+    except urllib.error.HTTPError as exc:
+        print(f"HTTP {exc.code}: {exc.read().decode('utf-8', errors='replace')}")
+        raise SystemExit(1)
+    except urllib.error.URLError as exc:
+        print(f"Connection error: {exc.reason}")
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    main()

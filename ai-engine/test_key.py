@@ -1,72 +1,60 @@
 """
-Test Gemini API connection — FIXED
+Test Amazon Nova API connectivity.
 """
-import google.generativeai as genai
-from dotenv import load_dotenv
-import os
-import warnings
-warnings.filterwarnings("ignore")
+import json
+import urllib.request
+import urllib.error
 
-load_dotenv()
+from config import NOVA_API_KEY, NOVA_BASE_URL, LLM_MODEL, NOVA_TIMEOUT_SECONDS
 
-api_key = os.getenv("GEMINI_API_KEY")
-print(f"API Key: {'✅ Loaded (' + api_key[:10] + '...)' if api_key else '❌ MISSING'}")
 
-genai.configure(api_key=api_key)
+def main():
+    print(f"Model: {LLM_MODEL}")
+    print(f"Timeout: {NOVA_TIMEOUT_SECONDS}s")
+    print(f"Key loaded: {'yes' if NOVA_API_KEY else 'no'}")
 
-# List available models
-print("\n📋 Available Models:")
-available_models = []
-for model in genai.list_models():
-    if 'generateContent' in model.supported_generation_methods:
-        available_models.append(model.name)
-        print(f"   ✅ {model.name}")
+    if not NOVA_API_KEY:
+        raise SystemExit("NOVA_API_KEY is missing")
 
-if not available_models:
-    print("   ❌ No models found! Check your API key.")
-    exit(1)
+    payload = {
+        "model": LLM_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": "Say Hello GrabResolve in one short line."
+            }
+        ],
+        "max_tokens": 60,
+        "temperature": 0.2
+    }
 
-# Try models in priority order
-models_to_try = [
-    "gemini-2.5-flash",
-    "gemini-pro-latest",
-    # "gemini-2.0-flash-lite", 
-    # "gemini-1.5-flash-latest",
-    # "gemini-1.5-flash",
-    # "gemini-1.5-pro",
-    # "gemini-pro",
-]
+    request = urllib.request.Request(
+        f"{NOVA_BASE_URL.rstrip('/')}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {NOVA_API_KEY}"
+        },
+        method="POST"
+    )
 
-working_model = None
+    try:
+        with urllib.request.urlopen(request, timeout=NOVA_TIMEOUT_SECONDS) as response:
+            body = response.read().decode("utf-8")
+            print(f"HTTP status: {response.status}")
+            print("Response body:")
+            print(body)
+    except urllib.error.HTTPError as exc:
+        body = exc.read().decode("utf-8", errors="replace")
+        print(f"HTTP status: {exc.code}")
+        print(f"Reason: {exc.reason}")
+        print("Raw error body:")
+        print(body)
+        raise SystemExit(1)
+    except urllib.error.URLError as exc:
+        print(f"Connection error: {exc.reason}")
+        raise SystemExit(1)
 
-print("\n🔄 Testing models...\n")
 
-for model_name in models_to_try:
-    full_name = f"models/{model_name}"
-    if full_name in available_models:
-        try:
-            print(f"   Testing {model_name}...", end=" ")
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content("Say 'Hello GrabResolve!' in one line only")
-            text = response.text.strip()
-            print(f"✅ Works! Response: {text}")
-            working_model = model_name
-            break
-        except Exception as e:
-            print(f"❌ Failed: {e}")
-    else:
-        print(f"   Skipping {model_name} — not available")
-
-if working_model:
-    print(f"\n{'='*50}")
-    print(f"🎉 USE THIS MODEL: {working_model}")
-    print(f"{'='*50}")
-    print(f"\n📌 Update ai-engine/config.py:")
-    print(f'   LLM_MODEL = "{working_model}"')
-    print(f"{'='*50}")
-else:
-    print("\n❌ No working model found!")
-    print("Try these fixes:")
-    print("1. Check your internet connection")
-    print("2. Create a new API key at https://aistudio.google.com/app/apikey")
-    print("3. Try a different Google account")
+if __name__ == "__main__":
+    main()
