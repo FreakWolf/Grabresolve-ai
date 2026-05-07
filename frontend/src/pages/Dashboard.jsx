@@ -1,31 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import MetricCard from '../components/MetricCard';
 import StatusBadge from '../components/StatusBadge';
+
+const REFRESH_INTERVAL_MS = 4000;
 
 function Dashboard() {
     const [stats, setStats] = useState(null);
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [seeding, setSeeding] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [lastUpdated, setLastUpdated] = useState(null);
 
     useEffect(() => {
-        fetchData();
+        fetchData({ showLoader: true });
+
+        const intervalId = window.setInterval(() => {
+            fetchData({ silent: true });
+        }, REFRESH_INTERVAL_MS);
+
+        return () => window.clearInterval(intervalId);
     }, []);
 
-    const fetchData = async () => {
+    const fetchData = async ({ showLoader = false, silent = false } = {}) => {
+        if (showLoader) setLoading(true);
+        if (silent) setRefreshing(true);
+
         try {
             const [ticketRes, overviewRes] = await Promise.all([
                 api.getTickets(),
                 api.getOverview().catch(() => ({ data: {} }))
             ]);
+
             setTickets(ticketRes.data);
             setStats(overviewRes.data);
+            setLastUpdated(new Date());
         } catch (err) {
             console.error('Dashboard error:', err);
         } finally {
-            setLoading(false);
+            if (showLoader) setLoading(false);
+            if (silent) setRefreshing(false);
         }
     };
 
@@ -33,7 +49,7 @@ function Dashboard() {
         setSeeding(true);
         try {
             await api.seed();
-            await fetchData();
+            await fetchData({ showLoader: true });
         } catch (err) {
             alert('Failed to seed. Is the AI Engine running on port 8000?');
         } finally {
@@ -46,9 +62,9 @@ function Dashboard() {
         setLoading(true);
         try {
             await api.investigateAll();
-            await fetchData();
+            await fetchData({ showLoader: true });
         } catch (err) {
-            alert('Batch investigation failed: ' + err.message);
+            alert(`Batch investigation failed: ${err.message}`);
         } finally {
             setLoading(false);
         }
@@ -65,17 +81,16 @@ function Dashboard() {
         );
     }
 
-    // Calculate local stats
     const totalTickets = tickets.length;
-    const autoResolved = tickets.filter(t => t.status === 'auto_resolved').length;
-    const humanReview = tickets.filter(t => t.status === 'human_review').length;
-    const escalated = tickets.filter(t => t.status === 'escalated').length;
-    const openTickets = tickets.filter(t => t.status === 'open').length;
-    const autoRate = totalTickets > 0 ? ((autoResolved / totalTickets) * 100).toFixed(1) : 0;
+    const autoResolved = tickets.filter(ticket => ticket.status === 'auto_resolved').length;
+    const humanReview = tickets.filter(ticket => ticket.status === 'human_review').length;
+    const escalated = tickets.filter(ticket => ticket.status === 'escalated').length;
+    const openTickets = tickets.filter(ticket => ticket.status === 'open').length;
+    const autoRate = totalTickets > 0 ? ((autoResolved / totalTickets) * 100).toFixed(1) : '0.0';
+    const overview = stats?.ai_analytics?.overview;
 
     return (
         <div className="p-6">
-            {/* Header */}
             <div className="flex justify-between items-start mb-8">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-800">
@@ -84,21 +99,23 @@ function Dashboard() {
                     <p className="text-gray-500 mt-1">
                         Autonomous Investigation & Resolution System
                     </p>
+                    <p className="text-xs text-gray-400 mt-2">
+                        {refreshing ? 'Refreshing live metrics...' : 'Live metrics update every 4 seconds'}
+                        {lastUpdated ? ` • Last updated ${lastUpdated.toLocaleTimeString()}` : ''}
+                    </p>
                 </div>
                 <div className="flex gap-3">
                     <button
                         onClick={handleSeed}
                         disabled={seeding}
-                        className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm 
-                                   font-medium hover:bg-blue-600 transition disabled:opacity-50"
+                        className="bg-blue-500 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-600 transition disabled:opacity-50"
                     >
                         {seeding ? '📦 Seeding...' : '📦 Load Sample Tickets'}
                     </button>
                     {openTickets > 0 && (
                         <button
                             onClick={handleInvestigateAll}
-                            className="bg-grab-green text-white px-4 py-2 rounded-lg text-sm 
-                                       font-medium hover:bg-green-600 transition pulse-green"
+                            className="bg-grab-green text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-green-600 transition pulse-green"
                         >
                             🤖 Investigate All ({openTickets})
                         </button>
@@ -106,14 +123,8 @@ function Dashboard() {
                 </div>
             </div>
 
-            {/* Metric Cards */}
             <div className="grid grid-cols-5 gap-4 mb-8">
-                <MetricCard
-                    icon="🎫"
-                    number={totalTickets}
-                    label="Total Tickets"
-                    color="blue"
-                />
+                <MetricCard icon="🎫" number={totalTickets} label="Total Tickets" color="blue" />
                 <MetricCard
                     icon="✅"
                     number={autoResolved}
@@ -121,68 +132,48 @@ function Dashboard() {
                     color="green"
                     subtitle={`${autoRate}% auto-rate`}
                 />
-                <MetricCard
-                    icon="🟡"
-                    number={humanReview}
-                    label="Human Review"
-                    color="orange"
-                />
-                <MetricCard
-                    icon="🔴"
-                    number={escalated}
-                    label="Escalated"
-                    color="red"
-                />
-                <MetricCard
-                    icon="🔵"
-                    number={openTickets}
-                    label="Open / Pending"
-                    color="blue"
-                />
+                <MetricCard icon="🟡" number={humanReview} label="Human Review" color="orange" />
+                <MetricCard icon="🔴" number={escalated} label="Escalated" color="red" />
+                <MetricCard icon="🔵" number={openTickets} label="Open / Pending" color="blue" />
             </div>
 
-            {/* Quick Stats Bar */}
-            {stats?.ai_analytics?.overview && (
-                <div className="bg-gradient-to-r from-grab-dark to-gray-800 text-white 
-                                rounded-xl p-5 mb-8">
+            {overview && (
+                <div className="bg-gradient-to-r from-grab-dark to-gray-800 text-white rounded-xl p-5 mb-8">
                     <h3 className="text-sm font-bold text-grab-green mb-3">
-                        📊 AI Engine Performance Metrics
+                        📊 Live Performance Metrics
                     </h3>
                     <div className="grid grid-cols-4 gap-6">
                         <div>
                             <div className="text-2xl font-bold text-grab-orange">
-                                {stats.ai_analytics.overview.auto_resolve_rate}%
+                                {overview.auto_resolve_rate}%
                             </div>
                             <div className="text-xs text-gray-400">Auto-Resolve Rate</div>
                         </div>
                         <div>
                             <div className="text-2xl font-bold text-grab-orange">
-                                {stats.ai_analytics.overview.avg_resolution_time_sec}s
+                                {overview.avg_resolution_time_sec}s
                             </div>
                             <div className="text-xs text-gray-400">Avg Resolution Time</div>
                         </div>
                         <div>
                             <div className="text-2xl font-bold text-grab-orange">
-                                {stats.ai_analytics.overview.sla_compliance_rate}%
+                                {overview.sla_compliance_rate}%
                             </div>
                             <div className="text-xs text-gray-400">SLA Compliance</div>
                         </div>
                         <div>
                             <div className="text-2xl font-bold text-grab-orange">
-                                {stats.ai_analytics.overview.total_tickets_today}
+                                {overview.processed_tickets ?? 0}
                             </div>
-                            <div className="text-xs text-gray-400">Processed Today</div>
+                            <div className="text-xs text-gray-400">Processed Tickets</div>
                         </div>
                     </div>
                 </div>
             )}
 
-            {/* Recent Tickets Table */}
             <div className="bg-white rounded-xl shadow-sm">
                 <div className="p-5 border-b flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-gray-800">
-                        🎫 Recent Tickets
-                    </h2>
+                    <h2 className="text-lg font-bold text-gray-800">🎫 Recent Tickets</h2>
                     <Link
                         to="/tickets"
                         className="text-sm text-grab-green font-medium hover:underline"
@@ -194,7 +185,7 @@ function Dashboard() {
                 {tickets.length === 0 ? (
                     <div className="p-10 text-center text-gray-400">
                         <div className="text-4xl mb-3">📭</div>
-                        <p>No tickets yet. Click "Load Sample Tickets" to get started!</p>
+                        <p>No tickets yet. Click "Load Sample Tickets" to get started.</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
@@ -231,8 +222,7 @@ function Dashboard() {
                                         <td className="p-4 text-sm font-semibold">
                                             {ticket.confidence_score
                                                 ? `${(ticket.confidence_score * 100).toFixed(0)}%`
-                                                : '—'
-                                            }
+                                                : '—'}
                                         </td>
                                         <td className="p-4">
                                             <Link
