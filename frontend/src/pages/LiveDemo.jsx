@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import api from '../services/api';
 import ConfidenceMeter from '../components/ConfidenceMeter';
 import EvidenceTrail from '../components/EvidenceTrail';
@@ -79,6 +79,44 @@ const sampleScenarios = [
     }
 ];
 
+const STEP_SEQUENCE = [
+    { msg: "🧠 Step 1: Classifying ticket...", delay: 500 },
+    { msg: "🔍 Step 2: Querying data sources...", delay: 1500 },
+    { msg: "📊 Step 2: Analyzing trip data, GPS records, driver profile...", delay: 2500 },
+    { msg: "🎯 Step 3: Running root cause analysis...", delay: 3500 },
+    { msg: "⚡ Step 4: Generating resolution...", delay: 5000 },
+    { msg: "📈 Step 5: Predicting SLA risk...", delay: 6000 }
+];
+
+function statusPresentation(status) {
+    switch (status) {
+        case 'auto_resolved':
+            return {
+                icon: '✅',
+                title: 'Ticket Auto-Resolved by AI!',
+                bannerClass: 'bg-green-50 border-2 border-green-200'
+            };
+        case 'human_review':
+            return {
+                icon: '🟡',
+                title: 'AI Recommends — Needs Human Review',
+                bannerClass: 'bg-yellow-50 border-2 border-yellow-200'
+            };
+        case 'escalated':
+            return {
+                icon: '🔴',
+                title: 'Escalated to Senior Agent',
+                bannerClass: 'bg-red-50 border-2 border-red-200'
+            };
+        default:
+            return {
+                icon: '🔵',
+                title: 'Investigation Completed',
+                bannerClass: 'bg-blue-50 border-2 border-blue-200'
+            };
+    }
+}
+
 function LiveDemo() {
     const [selectedScenario, setSelectedScenario] = useState(null);
     const [customTicket, setCustomTicket] = useState({
@@ -97,65 +135,65 @@ function LiveDemo() {
     const [investigating, setInvestigating] = useState(false);
     const [result, setResult] = useState(null);
     const [stepMessages, setStepMessages] = useState([]);
+    const timeoutRefs = useRef([]);
 
-    const simulateSteps = (callback) => {
-        const steps = [
-            { msg: "🧠 Step 1: Classifying ticket...", delay: 500 },
-            { msg: "🔍 Step 2: Querying data sources...", delay: 1500 },
-            { msg: "📊 Step 2: Analyzing trip data, GPS records, driver profile...", delay: 2500 },
-            { msg: "🎯 Step 3: Running root cause analysis...", delay: 3500 },
-            { msg: "⚡ Step 4: Generating resolution...", delay: 5000 },
-            { msg: "📈 Step 5: Predicting SLA risk...", delay: 6000 },
-        ];
+    useEffect(() => {
+        return () => {
+            timeoutRefs.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+        };
+    }, []);
 
-        steps.forEach(({ msg, delay }) => {
-            setTimeout(() => {
+    const resetTimers = () => {
+        timeoutRefs.current.forEach(timeoutId => window.clearTimeout(timeoutId));
+        timeoutRefs.current = [];
+    };
+
+    const queueSteps = () => {
+        resetTimers();
+        STEP_SEQUENCE.forEach(({ msg, delay }) => {
+            const timeoutId = window.setTimeout(() => {
                 setStepMessages(prev => [...prev, msg]);
             }, delay);
+            timeoutRefs.current.push(timeoutId);
         });
-
-        setTimeout(callback, 7000);
     };
 
     const handleInvestigate = async (ticketData) => {
         setInvestigating(true);
         setResult(null);
         setStepMessages([]);
+        queueSteps();
 
         try {
-            // First create the ticket
             await api.createTicket(ticketData).catch(() => {});
-
-            // Start step simulation
-            simulateSteps(async () => {
-                try {
-                    const res = await api.investigate(ticketData.ticket_id);
-                    setResult(res.data);
-                } catch (err) {
-                    // If backend fails, show error
-                    setStepMessages(prev => [
-                        ...prev,
-                        `❌ Error: ${err.message}. Make sure AI Engine (port 8000) and Backend (port 5000) are running.`
-                    ]);
-                } finally {
-                    setInvestigating(false);
-                }
-            });
+            const res = await api.investigate(ticketData.ticket_id);
+            setResult(res.data);
         } catch (err) {
+            setStepMessages(prev => [
+                ...prev,
+                `❌ Error: ${err.message}. Make sure AI Engine (port 8000) and Backend (port 5000) are running.`
+            ]);
+        } finally {
             setInvestigating(false);
-            alert('Failed: ' + err.message);
         }
     };
 
     const handleScenarioSelect = (scenario) => {
+        resetTimers();
         setSelectedScenario(scenario);
         setResult(null);
         setStepMessages([]);
     };
 
+    const investigation = result?.investigation;
+    const finalStatus = result?.ticket?.status || investigation?.resolution?.status || 'completed';
+    const presentation = statusPresentation(finalStatus);
+    const sourceCount = investigation?.investigation?.data_sources?.length || 0;
+    const findings = investigation?.investigation?.findings || [];
+    const refundCurrency = investigation?.resolution?.refund_currency || 'SGD';
+
     return (
         <div className="p-6 max-w-7xl mx-auto">
-            {/* Header */}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-800">
                     🚀 Live Demo — GrabResolve AI
@@ -165,7 +203,6 @@ function LiveDemo() {
                 </p>
             </div>
 
-            {/* Scenario Selection */}
             <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
                 <h2 className="font-bold text-gray-800 mb-4">
                     Choose a Demo Scenario:
@@ -194,7 +231,6 @@ function LiveDemo() {
                 </div>
             </div>
 
-            {/* Custom Ticket Form */}
             {selectedScenario && !selectedScenario.ticket && (
                 <div className="bg-white rounded-xl p-6 shadow-sm mb-6">
                     <h3 className="font-bold text-gray-800 mb-4">
@@ -274,10 +310,8 @@ function LiveDemo() {
                 </div>
             )}
 
-            {/* Selected Ticket Preview + Investigate Button */}
             {selectedScenario && (
-                <div className="bg-gradient-to-r from-grab-dark to-gray-800 rounded-xl p-6 
-                                shadow-sm mb-6 text-white">
+                <div className="bg-gradient-to-r from-grab-dark to-gray-800 rounded-xl p-6 shadow-sm mb-6 text-white">
                     <div className="flex justify-between items-start">
                         <div>
                             <h3 className="font-bold text-grab-green mb-2">
@@ -286,14 +320,12 @@ function LiveDemo() {
                             <div className="text-sm font-semibold mb-1">
                                 {selectedScenario.ticket
                                     ? selectedScenario.ticket.subject
-                                    : customTicket.subject || 'Enter details above'
-                                }
+                                    : customTicket.subject || 'Enter details above'}
                             </div>
                             <div className="text-xs text-gray-400">
                                 {selectedScenario.ticket
                                     ? selectedScenario.ticket.description
-                                    : customTicket.description || 'Enter description above'
-                                }
+                                    : customTicket.description || 'Enter description above'}
                             </div>
                         </div>
                         <button
@@ -306,20 +338,14 @@ function LiveDemo() {
                                 handleInvestigate(ticketData);
                             }}
                             disabled={investigating}
-                            className="bg-grab-green text-white px-8 py-4 rounded-xl 
-                                       font-bold text-lg hover:bg-green-600 transition 
-                                       disabled:opacity-50 flex-shrink-0 pulse-green"
+                            className="bg-grab-green text-white px-8 py-4 rounded-xl font-bold text-lg hover:bg-green-600 transition disabled:opacity-50 flex-shrink-0 pulse-green"
                         >
-                            {investigating
-                                ? '🔍 AI Investigating...'
-                                : '🚀 Run AI Investigation'
-                            }
+                            {investigating ? '🔍 AI Investigating...' : '🚀 Run AI Investigation'}
                         </button>
                     </div>
                 </div>
             )}
 
-            {/* Live Investigation Steps */}
             {stepMessages.length > 0 && (
                 <div className="bg-gray-900 rounded-xl p-6 shadow-sm mb-6 font-mono">
                     <h3 className="text-grab-green font-bold mb-3 text-sm">
@@ -347,55 +373,36 @@ function LiveDemo() {
                 </div>
             )}
 
-            {/* Investigation Result */}
-            {result && result.investigation && (
+            {result && investigation && (
                 <div className="space-y-6 fade-in">
-                    {/* Success Banner */}
-                    <div className={`rounded-xl p-6 shadow-sm ${
-                        result.investigation.auto_resolved
-                            ? 'bg-green-50 border-2 border-green-200'
-                            : result.investigation.status === 'human_review'
-                            ? 'bg-yellow-50 border-2 border-yellow-200'
-                            : 'bg-red-50 border-2 border-red-200'
-                    }`}>
+                    <div className={`rounded-xl p-6 shadow-sm ${presentation.bannerClass}`}>
                         <div className="flex items-center gap-4">
-                            <div className="text-5xl">
-                                {result.investigation.auto_resolved ? '✅' :
-                                 result.investigation.status === 'human_review' ? '🟡' : '🔴'}
-                            </div>
+                            <div className="text-5xl">{presentation.icon}</div>
                             <div>
                                 <h3 className="text-xl font-bold text-gray-800">
-                                    {result.investigation.auto_resolved
-                                        ? 'Ticket Auto-Resolved by AI!'
-                                        : result.investigation.status === 'human_review'
-                                        ? 'AI Recommends — Needs Human Review'
-                                        : 'Escalated to Senior Agent'
-                                    }
+                                    {presentation.title}
                                 </h3>
                                 <p className="text-sm text-gray-600 mt-1">
-                                    Processed in {result.investigation.processing_time_seconds}s | 
-                                    Confidence: {(result.investigation.confidence_score * 100).toFixed(0)}% | 
-                                    Sources queried: {result.investigation.investigation?.total_sources || 0}
+                                    Processed in {investigation.processing_time_seconds}s |
+                                    Confidence: {((investigation.confidence_score || 0) * 100).toFixed(0)}% |
+                                    Sources queried: {sourceCount}
                                 </p>
                             </div>
                         </div>
                     </div>
 
-                    {/* Confidence */}
                     <div className="bg-white rounded-xl p-6 shadow-sm">
-                        <ConfidenceMeter score={result.investigation.confidence_score || 0} />
+                        <ConfidenceMeter score={investigation.confidence_score || 0} />
                     </div>
 
-                    {/* Results Grid */}
                     <div className="grid grid-cols-2 gap-6">
-                        {/* Classification */}
-                        {result.investigation.classification && (
+                        {investigation.classification && (
                             <div className="bg-white rounded-xl p-6 shadow-sm">
                                 <h3 className="font-bold text-gray-800 mb-4">
                                     🧠 AI Classification
                                 </h3>
                                 <div className="grid grid-cols-2 gap-3">
-                                    {Object.entries(result.investigation.classification).map(([key, value]) => (
+                                    {Object.entries(investigation.classification).map(([key, value]) => (
                                         <div key={key} className="bg-gray-50 rounded-lg p-3">
                                             <div className="text-xs text-gray-500 capitalize">
                                                 {key.replace(/_/g, ' ')}
@@ -403,8 +410,7 @@ function LiveDemo() {
                                             <div className="text-sm font-semibold text-gray-700 mt-1">
                                                 {typeof value === 'boolean'
                                                     ? (value ? '✅ Yes' : '❌ No')
-                                                    : String(value)
-                                                }
+                                                    : String(value)}
                                             </div>
                                         </div>
                                     ))}
@@ -412,89 +418,86 @@ function LiveDemo() {
                             </div>
                         )}
 
-                        {/* Root Cause */}
-                        {result.investigation.root_cause && (
+                        {investigation.root_cause && (
                             <div className="bg-white rounded-xl p-6 shadow-sm">
                                 <h3 className="font-bold text-gray-800 mb-4">
                                     🎯 Root Cause
                                 </h3>
                                 <div className="bg-red-50 border-l-4 border-red-400 p-4 rounded mb-3">
                                     <div className="text-sm font-bold text-red-700">
-                                        {result.investigation.root_cause.primary_cause}
+                                        {investigation.root_cause.primary_cause}
                                     </div>
                                 </div>
-                                {result.investigation.root_cause.evidence_summary && (
+                                {investigation.root_cause.evidence_summary && (
                                     <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                                        {result.investigation.root_cause.evidence_summary}
+                                        {investigation.root_cause.evidence_summary}
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {/* Resolution */}
-                        {result.investigation.resolution && (
+                        {investigation.resolution && (
                             <div className="bg-white rounded-xl p-6 shadow-sm">
                                 <h3 className="font-bold text-gray-800 mb-4">
                                     ⚡ AI Resolution
                                 </h3>
                                 <div className="bg-green-50 border-l-4 border-green-400 p-4 rounded mb-3">
                                     <div className="text-sm font-bold text-green-700">
-                                        {result.investigation.resolution.action}
+                                        {investigation.resolution.action}
                                     </div>
                                 </div>
-                                {result.investigation.resolution.refund_amount && (
+                                {investigation.resolution.refund_amount && (
                                     <div className="bg-orange-50 p-3 rounded mb-3">
                                         <span className="text-xs text-orange-500">Refund: </span>
                                         <span className="text-lg font-bold text-orange-600">
-                                            {result.investigation.resolution.currency || 'SGD'}{' '}
-                                            {result.investigation.resolution.refund_amount}
+                                            {refundCurrency} {investigation.resolution.refund_amount}
                                         </span>
                                     </div>
                                 )}
-                                {result.investigation.resolution.customer_message && (
+                                {investigation.resolution.customer_message && (
                                     <div className="bg-blue-50 p-3 rounded">
                                         <div className="text-xs text-blue-500 font-semibold mb-1">
                                             📧 Customer Message:
                                         </div>
                                         <div className="text-sm text-blue-700 italic">
-                                            "{result.investigation.resolution.customer_message}"
+                                            "{investigation.resolution.customer_message}"
                                         </div>
                                     </div>
                                 )}
                             </div>
                         )}
 
-                        {/* Findings */}
-                        {result.investigation.investigation?.findings && (
-                            <div className="bg-white rounded-xl p-6 shadow-sm">
-                                <h3 className="font-bold text-gray-800 mb-4">
-                                    🔍 Key Findings
-                                </h3>
+                        <div className="bg-white rounded-xl p-6 shadow-sm">
+                            <h3 className="font-bold text-gray-800 mb-4">
+                                🔍 Key Findings
+                            </h3>
+                            {findings.length === 0 ? (
+                                <div className="text-sm text-gray-500 bg-gray-50 rounded p-3">
+                                    No structured findings were detected for this ticket.
+                                </div>
+                            ) : (
                                 <div className="space-y-2">
-                                    {result.investigation.investigation.findings.map((f, i) => (
+                                    {findings.map((finding, i) => (
                                         <div
                                             key={i}
-                                            className="bg-blue-50 border-l-4 border-blue-400 
-                                                       p-3 rounded text-sm text-blue-700"
+                                            className="bg-blue-50 border-l-4 border-blue-400 p-3 rounded text-sm text-blue-700"
                                         >
-                                            {f}
+                                            {finding}
                                         </div>
                                     ))}
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
 
-                    {/* Evidence Trail */}
-                    {result.investigation.evidence_trail && (
+                    {investigation.evidence_trail && (
                         <div className="bg-white rounded-xl p-6 shadow-sm">
-                            <EvidenceTrail evidence={result.investigation.evidence_trail} />
+                            <EvidenceTrail evidence={investigation.evidence_trail} />
                         </div>
                     )}
                 </div>
             )}
 
-            {/* Instructions when no scenario selected */}
             {!selectedScenario && (
                 <div className="bg-white rounded-xl p-10 text-center shadow-sm">
                     <div className="text-6xl mb-4">👆</div>
@@ -502,8 +505,7 @@ function LiveDemo() {
                         Select a Scenario Above
                     </h3>
                     <p className="text-gray-500">
-                        Choose a demo ticket to watch GrabResolve AI investigate 
-                        and resolve it in real-time
+                        Choose a demo ticket to watch GrabResolve AI investigate and resolve it in real-time
                     </p>
                 </div>
             )}
