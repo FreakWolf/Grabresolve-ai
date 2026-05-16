@@ -1,0 +1,111 @@
+{
+  "merchant_issues": {
+    "MERCH-PIZZA-001": {
+      "name": "Pizza Express KL",
+      "recent_complaints": {
+        "delivery_quality": 12,
+        "food_quality": 3
+      },
+      "trend": "increasing",
+      "quality_score": 3.2
+    },
+    "MERCH-THAI-001": {
+      "name": "Thai Express",
+      "recent_complaints": {
+        "wrong_order": 8,
+        "missing_items": 5
+      },
+      "trend": "stable",
+      "quality_score": 3.8
+    },
+    "MERCH-SPICE-001": {
+      "name": "Spice Garden",
+      "recent_complaints": {
+        "food_quality": 7,
+        "hygiene_violation": 3
+      },
+      "trend": "increasing",
+      "quality_score": 2.9
+    },
+    "MERCH-QUICK-001": {
+      "name": "Quick Bites",
+      "recent_complaints": {
+        "hygiene_violation": 11
+      },
+      "trend": "increasing",
+      "quality_score": 2.5
+    }
+  },
+  "driver_issues": {
+    "DRV-CARELESS-001": {
+      "name": "Driver D-001",
+      "recent_complaints_30d": 9,
+      "complaint_types": ["damaged_delivery", "package_damaged"],
+      "fraud_flags": [],
+      "rating": 3.4
+    },
+    "DRV-RECKLESS-001": {
+      "name": "Driver R-001",
+      "recent_complaints_30d": 7,
+      "complaint_types": ["safety_concern", "harassment"],
+      "fraud_flags": ["multiple_safety_complaints"],
+      "rating": 2.8
+    },
+    "DRV-FRAUD-001": {
+      "name": "Driver F-001",
+      "recent_complaints_30d": 14,
+      "complaint_types": ["fake_delivery_proof", "missing_delivery"],
+      "fraud_flags": ["reused_pod_images", "fake_gps_signals"],
+      "rating": 2.1
+    }
+  },
+  "warehouse_issues": {
+    "WH-KL-22": {
+      "name": "Warehouse KL-22",
+      "country": "Malaysia",
+      "damage_increase_percent": 41,
+      "affected_orders": 127,
+      "trend": "spike",
+      "category": "package_damaged"
+    },
+    "WH-SG-05": {
+      "name": "Warehouse SG-05",
+      "country": "Singapore",
+      "damage_increase_percent": 18,
+      "affected_orders": 32,
+      "trend": "stable"
+    }
+  },
+  "systemic_alerts": [
+    {
+      "id": "ALERT-001",
+      "category": "package_damaged",
+      "title": "Package damage spike in Malaysia logistics network",
+      "description": "41% increase in fragile package damage from KL-22 warehouse this week",
+      "severity": "high",
+      "active": true,
+      "affected_count": 127,
+      "trend": "increasing"
+    },
+    {
+      "id": "ALERT-002",
+      "category": "hygiene_violation",
+      "title": "Hygiene complaints concentrated at specific merchants",
+      "description": "3 merchants account for 67% of hygiene violations this month",
+      "severity": "medium",
+      "active": true,
+      "affected_count": 45,
+      "trend": "increasing"
+    },
+    {
+      "id": "ALERT-003",
+      "category": "missing_items",
+      "title": "Missing item complaints up 23% region-wide",
+      "description": "Possible packing issue at fulfillment centers",
+      "severity": "medium",
+      "active": true,
+      "affected_count": 89,
+      "trend": "increasing"
+    }
+  ]
+}

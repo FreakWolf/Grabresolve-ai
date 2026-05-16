@@ -1,102 +1,500 @@
 [
   {
-    "ticket_id": "TKT-2026-001",
+    "ticket_id": "DEMO-LEGIT-001",
+    "subject": "Wrong fare charged for my GrabCar trip",
+    "description": "I was charged $25 for a trip that should have been $15 based on the estimated fare. The driver took a longer route than necessary.",
+    "customer_id": "CUST-LEGIT-001",
+    "trip_id": "TRIP-001",
+    "driver_id": "DRV-001",
+    "category": "fare_dispute",
     "channel": "app",
-    "category": "ride",
-    "subcategory": "fare_dispute",
-    "customer_id": "RIDER-8821",
-    "driver_id": "DRIVER-4432",
-    "trip_id": "TRIP-99281",
-    "subject": "I was charged ₹450 but the app showed ₹320",
-    "description": "I took a GrabCar from MG Road to Whitefield. The estimated fare was ₹320 but I was charged ₹450. The route taken was longer than usual. Please investigate and refund the difference.",
     "country": "Singapore",
-    "city": "Singapore Central",
-    "timestamp": "2026-05-16T10:30:00Z",
+    "city": "Singapore",
     "priority": "medium",
-    "status": "open",
-    "sla_deadline": "2026-05-16T14:30:00Z"
+    "scenario_label": "✅ NORMAL: Should auto-resolve cleanly"
   },
   {
-    "ticket_id": "TKT-2026-002",
-    "channel": "email",
-    "category": "food_delivery",
-    "subcategory": "missing_item",
-    "customer_id": "RIDER-7712",
-    "merchant_id": "MERCHANT-2291",
-    "order_id": "ORDER-55123",
-    "subject": "Missing items in my GrabFood order",
-    "description": "I ordered 3 items from McDonald's via GrabFood but only received 2. The McChicken burger was missing from my order. Order total was $18.50.",
+    "ticket_id": "DEMO-VIP-SMALL-001",
+    "subject": "Minor fare discrepancy",
+    "description": "Trip cost slightly more than estimate. Charged $12 instead of $10.",
+    "customer_id": "CUST-VIP-001",
+    "trip_id": "TRIP-002",
+    "driver_id": "DRV-002",
+    "category": "fare_dispute",
+    "channel": "app",
     "country": "Singapore",
-    "city": "Jurong East",
-    "timestamp": "2026-05-16T11:15:00Z",
+    "city": "Singapore",
     "priority": "low",
-    "status": "open",
-    "sla_deadline": "2026-05-16T17:15:00Z"
+    "scenario_label": "✅ VIP: Small refund, high trust → auto-resolve fast"
   },
   {
-    "ticket_id": "TKT-2026-003",
+    "ticket_id": "DEMO-NEW-LEGIT-001",
+    "subject": "Payment failed but I was charged",
+    "description": "I tried to pay through GrabPay and it showed payment failed, but I see a charge on my card statement.",
+    "customer_id": "CUST-NEW-001",
+    "trip_id": "TRIP-003",
+    "category": "payment_issue",
     "channel": "app",
-    "category": "payment",
-    "subcategory": "double_charge",
-    "customer_id": "RIDER-3345",
-    "trip_id": "TRIP-88442",
-    "subject": "Charged twice for the same GrabCar ride",
-    "description": "I was charged twice for my GrabCar ride on May 15. Two transactions of SGD 25.60 appeared on my GrabPay wallet. Please refund one.",
     "country": "Singapore",
-    "city": "Orchard",
-    "timestamp": "2026-05-16T09:00:00Z",
+    "city": "Singapore",
     "priority": "high",
-    "status": "open",
-    "sla_deadline": "2026-05-16T11:00:00Z"
+    "scenario_label": "🟡 NEW USER: Legitimate issue, but new account → human review"
   },
   {
-    "ticket_id": "TKT-2026-004",
+    "ticket_id": "DEMO-NEW-FRAUD-001",
+    "subject": "Refund needed urgently for $80 trip",
+    "description": "The driver was rude and the trip was bad. I want a full refund for the $80 I paid.",
+    "customer_id": "CUST-NEW-FRAUD-001",
+    "trip_id": "TRIP-FAKE-001",
+    "category": "refund_delay",
     "channel": "app",
-    "category": "driver_issue",
-    "subcategory": "driver_behavior",
-    "customer_id": "RIDER-6678",
-    "driver_id": "DRIVER-1123",
-    "trip_id": "TRIP-77231",
-    "subject": "Driver took a much longer route",
-    "description": "My driver deliberately took a longer route from Changi Airport to Marina Bay. Google Maps showed 25 min but the trip took 50 min. I believe this was intentional to increase the fare.",
     "country": "Singapore",
-    "city": "Marina Bay",
-    "timestamp": "2026-05-16T08:45:00Z",
+    "city": "Singapore",
     "priority": "high",
-    "status": "open",
-    "sla_deadline": "2026-05-16T10:45:00Z"
+    "scenario_label": "🚨 FRAUD RISK: New account + immediate large refund request"
   },
   {
-    "ticket_id": "TKT-2026-005",
+    "ticket_id": "DEMO-VELOCITY-001",
+    "subject": "Another fare problem today",
+    "description": "Same as my other tickets today, fare was wrong again.",
+    "customer_id": "CUST-VELOCITY-001",
+    "trip_id": "TRIP-004",
+    "category": "fare_dispute",
     "channel": "app",
-    "category": "payment",
-    "subcategory": "refund_not_received",
-    "customer_id": "RIDER-9901",
-    "trip_id": "TRIP-66112",
-    "subject": "Refund approved 5 days ago but not received",
-    "description": "My refund of SGD 15.30 was approved on May 11 but I still haven't received it in my GrabPay wallet. Reference: REF-44521.",
     "country": "Malaysia",
     "city": "Kuala Lumpur",
-    "timestamp": "2026-05-16T12:00:00Z",
     "priority": "medium",
-    "status": "open",
-    "sla_deadline": "2026-05-16T18:00:00Z"
+    "scenario_label": "🚨 VELOCITY: 7 tickets in 24h → policy block"
   },
   {
-    "ticket_id": "TKT-2026-006",
+    "ticket_id": "DEMO-REPEAT-001",
+    "subject": "Fare dispute again",
+    "description": "Driver took a longer route, I want a refund.",
+    "customer_id": "CUST-REPEAT-001",
+    "trip_id": "TRIP-005",
+    "driver_id": "DRV-003",
+    "category": "fare_dispute",
     "channel": "app",
-    "category": "ride",
-    "subcategory": "cancellation_fee",
-    "customer_id": "RIDER-5543",
-    "driver_id": "DRIVER-8876",
-    "trip_id": "TRIP-44098",
-    "subject": "Unfair cancellation fee charged",
-    "description": "Driver was 15 minutes late and didn't move from pickup point. I cancelled and was charged SGD 5 cancellation fee. This is unfair as the driver was late.",
     "country": "Singapore",
-    "city": "Tampines",
-    "timestamp": "2026-05-16T07:30:00Z",
+    "city": "Singapore",
     "priority": "medium",
-    "status": "open",
-    "sla_deadline": "2026-05-16T13:30:00Z"
+    "scenario_label": "🚨 PATTERN: 4th fare dispute in 30 days → fraud agent triggers"
+  },
+  {
+    "ticket_id": "DEMO-COOLDOWN-001",
+    "subject": "Need another refund",
+    "description": "I had another bad trip just now, please refund $20.",
+    "customer_id": "CUST-COOLDOWN-001",
+    "trip_id": "TRIP-006",
+    "category": "refund_delay",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "medium",
+    "scenario_label": "🟡 COOLDOWN: Got refund 3h ago → policy violation"
+  },
+  {
+    "ticket_id": "DEMO-MONTHLY-MAX-001",
+    "subject": "Sixth refund this month",
+    "description": "I had another payment issue, please refund $35.",
+    "customer_id": "CUST-MONTHLY-MAX-001",
+    "trip_id": "TRIP-007",
+    "category": "payment_issue",
+    "channel": "app",
+    "country": "Indonesia",
+    "city": "Jakarta",
+    "priority": "medium",
+    "scenario_label": "🟡 MONTHLY MAX: Hit 5 refunds/month limit → escalate"
+  },
+  {
+    "ticket_id": "DEMO-CRITICAL-FRAUD-001",
+    "subject": "URGENT - need refund of $300 NOW",
+    "description": "Driver scammed me, refund $300 immediately or I will report Grab to authorities!",
+    "customer_id": "CUST-FRAUD-CRITICAL-001",
+    "trip_id": "TRIP-FAKE-002",
+    "category": "refund_delay",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "critical",
+    "scenario_label": "🚨 CRITICAL FRAUD: All red flags → BLOCK + fraud team"
+  },
+  {
+    "ticket_id": "DEMO-FLAGGED-RECOVERY-001",
+    "subject": "Payment didn't go through",
+    "description": "My GrabPay shows payment pending for over an hour for trip yesterday.",
+    "customer_id": "CUST-FLAGGED-001",
+    "trip_id": "TRIP-008",
+    "category": "payment_issue",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "medium",
+    "scenario_label": "🟡 EX-FLAGGED: Now well-behaved, but still extra scrutiny"
+  },
+  {
+    "ticket_id": "DEMO-LARGE-REFUND-001",
+    "subject": "Major double-charge issue - $250",
+    "description": "GrabPay charged me twice for the same trip. I see two transactions of $125 each on my statement for the same ride.",
+    "customer_id": "CUST-LARGE-REFUND-001",
+    "trip_id": "TRIP-009",
+    "category": "payment_issue",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "high",
+    "scenario_label": "🟡 LARGE REFUND: Legit but exceeds $50 auto-cap → human review"
+  },
+  {
+    "ticket_id": "DEMO-HUGE-REFUND-001",
+    "subject": "Need $800 refund - mistakenly charged",
+    "description": "I was charged $800 for what should have been a $20 trip. System glitch.",
+    "customer_id": "CUST-LEGIT-001",
+    "trip_id": "TRIP-010",
+    "category": "payment_issue",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "critical",
+    "scenario_label": "🚨 HARD CAP: Exceeds $500 SGD hard cap → senior management"
+  },
+  {
+    "ticket_id": "DEMO-DRIVER-COMPLAINT-001",
+    "subject": "Driver was extremely rude",
+    "description": "The driver yelled at me when I asked him to use the AC. Very unprofessional behavior.",
+    "customer_id": "CUST-DRIVER-COMPLAINT-001",
+    "trip_id": "TRIP-011",
+    "driver_id": "DRV-LOW-RATING-001",
+    "category": "driver_behavior",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "medium",
+    "scenario_label": "🟡 DRIVER ISSUE: Category requires human review (per policy)"
+  },
+  {
+    "ticket_id": "DEMO-DRIVER-PROTECTED-001",
+    "subject": "Driver complaint - want him suspended",
+    "description": "This driver is the worst, please suspend him from the platform!",
+    "customer_id": "CUST-LEGIT-001",
+    "trip_id": "TRIP-012",
+    "driver_id": "DRV-PROTECTED-001",
+    "category": "driver_behavior",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "high",
+    "scenario_label": "🛡️ DRIVER PROTECTION: 4.8★ driver, AI cannot suspend"
+  },
+  {
+    "ticket_id": "DEMO-PROHIBITED-001",
+    "subject": "I want a permanent ban issued for this driver",
+    "description": "Please permanently ban this driver and file a police report against them.",
+    "customer_id": "CUST-LEGIT-001",
+    "trip_id": "TRIP-013",
+    "driver_id": "DRV-002",
+    "category": "driver_behavior",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "high",
+    "scenario_label": "🚫 PROHIBITED: Customer requests ban/police - AI cannot do these"
+  },
+  {
+    "ticket_id": "DEMO-MISSING-DATA-001",
+    "subject": "Refund for trip yesterday",
+    "description": "Need refund for my trip but I don't remember the trip ID.",
+    "customer_id": "CUST-LEGIT-001",
+    "category": "fare_dispute",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "low",
+    "scenario_label": "🟡 MISSING DATA: No trip_id → policy requires it for fare_dispute"
+  },
+  {
+    "ticket_id": "DEMO-ACCOUNT-001",
+    "subject": "Someone is using my account",
+    "description": "I see trips on my account that I didn't take. My account may be hacked.",
+    "customer_id": "CUST-LEGIT-001",
+    "category": "account_issue",
+    "channel": "app",
+    "country": "Singapore",
+    "city": "Singapore",
+    "priority": "critical",
+    "scenario_label": "🟡 SECURITY: Account issue category → never auto-resolve"
+  },
+  {
+    "ticket_id": "DEMO-MERCHANT-001",
+    "subject": "Wrong food delivered from restaurant",
+    "description": "I ordered chicken rice but received pad thai. The restaurant got my order wrong.",
+    "customer_id": "CUST-LEGIT-001",
+    "order_id": "ORD-001",
+    "merchant_id": "MERCH-001",
+    "category": "delivery_issue",
+    "channel": "app",
+    "country": "Thailand",
+    "city": "Bangkok",
+    "priority": "medium",
+    "scenario_label": "✅ DELIVERY: GrabFood scenario, small refund"
+  },
+
+  {
+    "ticket_id": "DEMO-1-MISSING-BURGERS",
+    "subject": "Missing 1 burger from my order",
+    "description": "I ordered 3 cheeseburgers from Burger Express but only received 2. Order ID ORD-MB-2024. Total paid was $24 for 3 burgers. Please refund the missing burger and check why this happened.",
+    "customer_id": "CUST-LEGIT-001",
+    "merchant_id": "MERCH-BURGER-001",
+    "order_id": "ORD-MB-2024",
+    "category": "missing_items",
+    "channel": "app",
+    "country": "Singapore",
+    "priority": "medium",
+    "scenario_label": "🍔 GrabFood Missing Items — Multi-Agent Vision + OCR",
+    "evidence": [
+      {
+        "id": "EV-MB-001",
+        "type": "image",
+        "filename": "delivery_bag_photo.jpg",
+        "url": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=600&q=80",
+        "description": "Photo of delivery bag with received burgers",
+        "claimed_content": "Delivery bag opened showing exactly 2 burger boxes inside, no third burger visible",
+        "metadata": {
+          "uploaded_at": "2025-01-16T18:30:00Z",
+          "size_kb": 412,
+          "device": "iPhone 13"
+        }
+      },
+      {
+        "id": "EV-MB-002",
+        "type": "document",
+        "filename": "order_receipt.pdf",
+        "url": "https://images.unsplash.com/photo-1572799454167-04c93519aabc?w=600&q=80",
+        "description": "Original order receipt",
+        "claimed_content": "Receipt: 3x Cheeseburger @ $8 each = $24.00, Order ORD-MB-2024, Restaurant: Burger Express, Time: 18:15",
+        "metadata": {
+          "uploaded_at": "2025-01-16T18:31:00Z",
+          "size_kb": 98
+        }
+      },
+      {
+        "id": "EV-MB-003",
+        "type": "image",
+        "filename": "order_screenshot.png",
+        "url": "https://images.unsplash.com/photo-1556742502-ec7c0e9f34b1?w=600&q=80",
+        "description": "Screenshot of order in app",
+        "claimed_content": "App screenshot showing order: 3 Cheeseburgers, 1 Large Fries, 2 Sodas. Total $32.50",
+        "metadata": {
+          "uploaded_at": "2025-01-16T18:32:00Z",
+          "size_kb": 156
+        }
+      }
+    ]
+  },
+  {
+    "ticket_id": "DEMO-2-DAMAGED-GROCERIES",
+    "subject": "Eggs broken and milk leaked - GrabMart",
+    "description": "My GrabMart grocery delivery arrived with 6 of 12 eggs broken and the milk carton is leaking everywhere. The whole bag is wet. Order ID ORD-GM-5567. This is unacceptable.",
+    "customer_id": "CUST-LEGIT-002",
+    "merchant_id": "MERCH-GROCER-001",
+    "driver_id": "DRV-CARELESS-001",
+    "order_id": "ORD-GM-5567",
+    "category": "damaged_delivery",
+    "channel": "app",
+    "country": "Malaysia",
+    "priority": "high",
+    "scenario_label": "🛒 GrabMart Damaged Groceries — Vision + Logistics Pattern AI",
+    "evidence": [
+      {
+        "id": "EV-GM-001",
+        "type": "image",
+        "filename": "broken_eggs.jpg",
+        "url": "https://images.unsplash.com/photo-1607637219970-d9d29ecedd0e?w=600&q=80",
+        "description": "Photo of egg carton with broken eggs",
+        "claimed_content": "Egg carton with 6 of 12 eggs visibly cracked and broken, yolks leaking onto carton",
+        "metadata": {
+          "uploaded_at": "2025-01-16T14:00:00Z",
+          "size_kb": 523
+        }
+      },
+      {
+        "id": "EV-GM-002",
+        "type": "image",
+        "filename": "leaking_milk.jpg",
+        "url": "https://images.unsplash.com/photo-1610725664285-7c57e6eeac3f?w=600&q=80",
+        "description": "Photo of leaking milk carton",
+        "claimed_content": "Milk carton with visible split at bottom, milk pooled in delivery bag",
+        "metadata": {
+          "uploaded_at": "2025-01-16T14:01:00Z",
+          "size_kb": 478
+        }
+      },
+      {
+        "id": "EV-GM-003",
+        "type": "image",
+        "filename": "delivery_bag_state.jpg",
+        "url": "https://images.unsplash.com/photo-1607349913338-fca6f7fc42d0?w=600&q=80",
+        "description": "Overall state of delivery bag",
+        "claimed_content": "Soaked delivery bag with visible damage to multiple grocery items inside",
+        "metadata": {
+          "uploaded_at": "2025-01-16T14:02:00Z",
+          "size_kb": 567
+        }
+      }
+    ]
+  },
+  {
+    "ticket_id": "DEMO-3-EXPRESS-LAPTOP",
+    "subject": "Laptop arrived damaged via GrabExpress",
+    "description": "I sent a brand new MacBook Pro (declared value $2400) via GrabExpress with FRAGILE labels. Package arrived with severe dent on corner. Laptop screen is now cracked. I have insurance receipt.",
+    "customer_id": "CUST-LEGIT-003",
+    "driver_id": "DRV-CARELESS-001",
+    "category": "package_damaged",
+    "channel": "app",
+    "country": "Malaysia",
+    "priority": "critical",
+    "scenario_label": "📦 GrabExpress Damage — Multi-Doc Analysis + Liability AI",
+    "evidence": [
+      {
+        "id": "EV-EX-001",
+        "type": "image",
+        "filename": "damaged_box.jpg",
+        "url": "https://images.unsplash.com/photo-1605000797499-95a51c5269ae?w=600&q=80",
+        "description": "Photo of damaged shipping box",
+        "claimed_content": "Cardboard box with severe dent on top-right corner, FRAGILE stickers visible, box partially crushed",
+        "metadata": {
+          "uploaded_at": "2025-01-16T10:00:00Z",
+          "size_kb": 645
+        }
+      },
+      {
+        "id": "EV-EX-002",
+        "type": "image",
+        "filename": "cracked_laptop.jpg",
+        "url": "https://images.unsplash.com/photo-1580927752452-89d86da3fa0a?w=600&q=80",
+        "description": "Photo of cracked laptop screen",
+        "claimed_content": "MacBook Pro with visible crack across screen, damage consistent with impact",
+        "metadata": {
+          "uploaded_at": "2025-01-16T10:02:00Z",
+          "size_kb": 712
+        }
+      },
+      {
+        "id": "EV-EX-003",
+        "type": "document",
+        "filename": "purchase_invoice.pdf",
+        "url": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?w=600&q=80",
+        "description": "Original purchase invoice",
+        "claimed_content": "Apple Store invoice: MacBook Pro 14-inch M3, $2400.00, Insurance: AppleCare+, Purchase date: 2025-01-10",
+        "metadata": {
+          "uploaded_at": "2025-01-16T10:03:00Z",
+          "size_kb": 245
+        }
+      },
+      {
+        "id": "EV-EX-004",
+        "type": "image",
+        "filename": "fragile_labels.jpg",
+        "url": "https://images.unsplash.com/photo-1590247813693-5541d1c609fd?w=600&q=80",
+        "description": "FRAGILE labels on the package",
+        "claimed_content": "Multiple bright red FRAGILE warning stickers and HANDLE WITH CARE labels clearly visible on all sides",
+        "metadata": {
+          "uploaded_at": "2025-01-16T10:04:00Z",
+          "size_kb": 198
+        }
+      }
+    ]
+  },
+  {
+    "ticket_id": "DEMO-4-FAKE-POD",
+    "subject": "Driver claimed delivery but I never received package",
+    "description": "GrabExpress driver marked my package as delivered with a photo, but I have been home all day and nothing arrived. The photo doesn't even look like my doorstep. I checked with all neighbors - nothing.",
+    "customer_id": "CUST-LEGIT-004",
+    "driver_id": "DRV-FRAUD-001",
+    "category": "wrong_delivery",
+    "channel": "app",
+    "country": "Singapore",
+    "priority": "high",
+    "scenario_label": "🚨 Fake Delivery Proof — Image Forensics + Fraud AI",
+    "evidence": [
+      {
+        "id": "EV-FP-001",
+        "type": "image",
+        "filename": "drivers_fake_pod_image.jpg",
+        "url": "https://images.unsplash.com/photo-1607344645866-009c320b63e0?w=600&q=80",
+        "description": "Driver's submitted proof of delivery photo (suspicious)",
+        "claimed_content": "Generic doorstep photo with package - claimed as customer's address but appears to be a different location",
+        "metadata": {
+          "uploaded_at": "2025-01-16T15:30:00Z",
+          "size_kb": 89,
+          "gps_coordinates": "MISMATCH",
+          "device": "Unknown",
+          "edited": true
+        }
+      },
+      {
+        "id": "EV-FP-002",
+        "type": "image",
+        "filename": "actual_doorstep.jpg",
+        "url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&q=80",
+        "description": "Customer's actual doorstep for comparison",
+        "claimed_content": "Customer's real front door area showing different background, different door color, different mat",
+        "metadata": {
+          "uploaded_at": "2025-01-16T16:00:00Z",
+          "size_kb": 423
+        }
+      }
+    ]
+  },
+  {
+    "ticket_id": "DEMO-5-FOOD-SAFETY",
+    "subject": "Spoiled food delivered - made me sick",
+    "description": "Ordered chicken biryani from Spice Garden. Food smelled rotten when opened, but I ate few bites and got severe food poisoning. Currently in ER getting treatment. This is a serious health issue.",
+    "customer_id": "CUST-LEGIT-005",
+    "merchant_id": "MERCH-SPICE-001",
+    "order_id": "ORD-SP-9988",
+    "category": "safety_critical",
+    "channel": "app",
+    "country": "Singapore",
+    "priority": "critical",
+    "scenario_label": "⚠️ Food Safety AI — Vision + Health Risk + Pattern Detection",
+    "evidence": [
+      {
+        "id": "EV-FS-001",
+        "type": "image",
+        "filename": "spoiled_biryani.jpg",
+        "url": "https://images.unsplash.com/photo-1631515243349-e0cb75fb8d3a?w=600&q=80",
+        "description": "Photo of spoiled biryani with mold",
+        "claimed_content": "Biryani with visible green/black mold spots on rice, discolored chicken pieces, off-color appearance indicating spoilage",
+        "metadata": {
+          "uploaded_at": "2025-01-16T20:00:00Z",
+          "size_kb": 534
+        }
+      },
+      {
+        "id": "EV-FS-002",
+        "type": "document",
+        "filename": "ER_admission_report.pdf",
+        "url": "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=600&q=80",
+        "description": "Hospital ER admission report",
+        "claimed_content": "Singapore General Hospital ER report. Patient presented with acute gastroenteritis symptoms. Diagnosis: Food poisoning (suspected). Treatment: IV fluids, anti-emetics. Admitted: 21:30 on 2025-01-16",
+        "metadata": {
+          "uploaded_at": "2025-01-16T22:00:00Z",
+          "size_kb": 1240
+        }
+      },
+      {
+        "id": "EV-FS-003",
+        "type": "image",
+        "filename": "container_label.jpg",
+        "url": "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=600&q=80",
+        "description": "Food container showing prep time",
+        "claimed_content": "Container label showing preparation time of 14:30 - food was prepared 5+ hours before delivery, far exceeding safe holding time",
+        "metadata": {
+          "uploaded_at": "2025-01-16T20:01:00Z",
+          "size_kb": 287
+        }
+      }
+    ]
   }
 ]

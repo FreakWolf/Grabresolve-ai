@@ -1,0 +1,103 @@
+version: "2.2-strict-absolute"
+last_updated: "2025-01-16"
+mode: "strict"
+
+# ============================================================
+# REFUND LIMITS
+# Precedence (highest → lowest):
+#   1. absolute_block_threshold  (any currency, hard stop)
+#   2. hard_cap                  (per-currency, hard stop)
+#   3. auto_approve_max          (per-currency, caps + human review)
+#   4. monthly / cooldown        (history-based)
+# ============================================================
+refund_limits:
+  # NEW: Absolute global ceiling - currency-agnostic
+  # ANY refund >= this value is BLOCKED regardless of currency
+  absolute_block_threshold: 800
+
+  auto_approve_max:
+    SGD: 50.00
+    MYR: 150.00
+    IDR: 500000
+    THB: 1500
+    PHP: 2000
+    VND: 800000
+
+  hard_cap:
+    SGD: 500.00
+    MYR: 1500.00
+    IDR: 5000000
+    THB: 15000
+    PHP: 20000
+    VND: 8000000
+
+  cooldown_hours: 24
+  max_per_customer_monthly: 5
+
+confidence_rules:
+  auto_resolve_min: 0.75
+  escalation_threshold: 0.40
+  high_value_action_min: 0.85
+
+fraud_rules:
+  max_complaints_30days: 8
+  max_complaints_7days: 4
+  repeat_refund_pattern_days: 30
+  repeat_refund_pattern_count: 3
+  max_tickets_24h: 5
+  new_account_threshold_days: 7
+  fraud_score_block_threshold: 0.50
+  fraud_score_escalate_threshold: 0.75
+
+driver_rules:
+  ai_can_suspend: false
+  max_auto_warnings: 2
+  protected_rating_threshold: 4.5
+
+prohibited_actions:
+  - "permanent_account_ban"
+  - "driver_termination"
+  - "merchant_termination"
+  - "legal_action"
+  - "police_report"
+  - "press_release"
+  - "permanent ban"
+  - "ban this driver"
+  - "ban this customer"
+  - "lawsuit"
+  - "criminal charges"
+
+category_rules:
+  payment_issue:
+    require_payment_data: true
+    auto_resolve_allowed: true
+  fare_dispute:
+    require_trip_data: true
+    require_gps_data: false
+    auto_resolve_allowed: true
+  driver_behavior:
+    require_driver_data: true
+    auto_resolve_allowed: false
+  account_issue:
+    auto_resolve_allowed: false
+  refund_delay:
+    auto_resolve_allowed: true
+    require_payment_data: true
+  delivery_issue:
+    auto_resolve_allowed: true
+  cancellation_fee:
+    auto_resolve_allowed: true
+
+country_overrides:
+  Singapore:
+    refund_currency_default: "SGD"
+  Malaysia:
+    refund_currency_default: "MYR"
+  Indonesia:
+    refund_currency_default: "IDR"
+  Thailand:
+    refund_currency_default: "THB"
+  Philippines:
+    refund_currency_default: "PHP"
+  Vietnam:
+    refund_currency_default: "VND"
