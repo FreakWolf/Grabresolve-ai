@@ -82,6 +82,20 @@ function TicketDetail() {
 
     const { ticket, investigation } = data;
     const inv = investigation;
+    const resolutionAction = inv?.resolution?.action_type;
+
+    let displayStatus = ticket.status;
+
+    if (resolutionAction === 'escalate') {
+        displayStatus = 'human_review';
+    } else if (
+        resolutionAction === 'refund' ||
+        resolutionAction === 'partial_refund' ||
+        resolutionAction === 'credit' ||
+        resolutionAction === 'resolved'
+    ) {
+        displayStatus = 'resolved';
+    }
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
@@ -102,7 +116,7 @@ function TicketDetail() {
                             <h1 className="text-2xl font-bold text-gray-800">
                                 {ticket.ticket_id}
                             </h1>
-                            <StatusBadge status={ticket.status} />
+                            <StatusBadge status={displayStatus} />
                         </div>
                         <h2 className="text-lg text-gray-700 mb-2">{ticket.subject}</h2>
                         <p className="text-gray-500 text-sm">{ticket.description}</p>
@@ -161,9 +175,9 @@ function TicketDetail() {
                         <div className="bg-white rounded-xl p-6 shadow-sm">
                             <ConfidenceMeter score={inv.confidence_score || 0} />
                             <div className="mt-3 text-xs text-gray-500">
-                                Processing time: {inv.processing_time_seconds}s | 
-                                Sources: {inv.investigation?.total_sources || 0} | 
-                                Findings: {inv.investigation?.total_findings || 0}
+                                Processing time: {Number(inv.processing_time_seconds || 0).toFixed(1)}s |
+                                Sources: {inv.investigation?.data_sources?.length || 0} |
+                                Findings: {inv.investigation?.findings?.length || 0}
                             </div>
                         </div>
 

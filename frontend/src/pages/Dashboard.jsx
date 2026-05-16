@@ -217,7 +217,22 @@ function Dashboard() {
                                             {ticket.country || '—'}
                                         </td>
                                         <td className="p-4">
-                                            <StatusBadge status={ticket.status} />
+                                            {(() => {
+                                                let displayStatus = ticket.status;
+                                                const resolutionAction = ticket.resolution?.action_type;
+
+                                                if (resolutionAction === 'escalate') {
+                                                    displayStatus = 'human_review';
+                                                } else if (
+                                                    resolutionAction === 'refund' ||
+                                                    resolutionAction === 'partial_refund' ||
+                                                    resolutionAction === 'credit' ||
+                                                    resolutionAction === 'resolved'
+                                                ) {
+                                                    displayStatus = 'resolved';
+                                                }
+                                                return <StatusBadge status={displayStatus} />;
+                                            })()}
                                         </td>
                                         <td className="p-4 text-sm font-semibold">
                                             {ticket.confidence_score

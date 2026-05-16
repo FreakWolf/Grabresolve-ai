@@ -116,7 +116,22 @@ function TicketQueue() {
                                         <span className="font-mono font-bold text-grab-green text-sm">
                                             {ticket.ticket_id}
                                         </span>
-                                        <StatusBadge status={ticket.status} />
+                                        {(() => {
+                                            let displayStatus = ticket.status;
+                                            const resolutionAction = ticket.resolution?.action_type;
+
+                                            if (resolutionAction === 'escalate') {
+                                                displayStatus = 'human_review';
+                                            } else if (
+                                                resolutionAction === 'refund' ||
+                                                resolutionAction === 'partial_refund' ||
+                                                resolutionAction === 'credit' ||
+                                                resolutionAction === 'resolved'
+                                            ) {
+                                                displayStatus = 'resolved';
+                                            }
+                                            return <StatusBadge status={displayStatus} />;
+                                        })()}
                                         {ticket.confidence_score && (
                                             <span className="text-xs bg-gray-100 px-2 py-1 rounded-full text-gray-600">
                                                 Confidence: {(ticket.confidence_score * 100).toFixed(0)}%
@@ -169,6 +184,7 @@ function TicketQueue() {
             </div>
         </div>
     );
+
 }
 
 export default TicketQueue;

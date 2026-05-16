@@ -73,6 +73,19 @@ function Dashboard() {
     const openTickets = tickets.filter(t => t.status === 'open').length;
     const autoRate = totalTickets > 0 ? ((autoResolved / totalTickets) * 100).toFixed(1) : 0;
 
+    let displayStatus = tickets.status;
+
+    if (resolutionAction === 'escalate') {
+        displayStatus = 'human_review';
+    } else if (
+        resolutionAction === 'refund' ||
+        resolutionAction === 'partial_refund' ||
+        resolutionAction === 'credit' ||
+        resolutionAction === 'resolved'
+    ) {
+        displayStatus = 'resolved';
+    }
+
     return (
         <div className="p-6">
             {/* Header */}
@@ -225,9 +238,7 @@ function Dashboard() {
                                         <td className="p-4 text-xs text-gray-500">
                                             {ticket.country || '—'}
                                         </td>
-                                        <td className="p-4">
-                                            <StatusBadge status={ticket.status} />
-                                        </td>
+                                            <StatusBadge status={displayStatus} />
                                         <td className="p-4 text-sm font-semibold">
                                             {ticket.confidence_score
                                                 ? `${(ticket.confidence_score * 100).toFixed(0)}%`
