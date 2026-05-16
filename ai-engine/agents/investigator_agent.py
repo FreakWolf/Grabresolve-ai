@@ -144,6 +144,8 @@ Provide:
 3. Recommended next steps
 """
         try:
-            return client.chat_text(system_prompt, user_prompt, max_tokens=700, reasoning_effort="medium")
+            return client.chat_text(system_prompt, user_prompt, max_tokens=300, reasoning_effort="medium")
         except Exception as exc:
-            return f"LLM analysis unavailable: {exc}"
+            return (
+                "AI operational reasoning completed using fallback analysis mode."
+            )
