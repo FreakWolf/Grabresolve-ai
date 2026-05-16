@@ -1,58 +1,27 @@
 """
-Test Amazon Nova API connectivity.
+Test LLM connectivity.
 """
-import json
-import urllib.request
-import urllib.error
-
-from config import NOVA_API_KEY, NOVA_BASE_URL, LLM_MODEL, NOVA_TIMEOUT_SECONDS
+from config import AWS_REGION, LLM_MODEL, LLM_PROVIDER, NOVA_API_KEY, NOVA_TIMEOUT_SECONDS
+from llm_client import client
 
 
 def main():
+    print(f"Provider: {LLM_PROVIDER}")
     print(f"Model: {LLM_MODEL}")
+    print(f"AWS region: {AWS_REGION}")
     print(f"Timeout: {NOVA_TIMEOUT_SECONDS}s")
-    print(f"Key loaded: {'yes' if NOVA_API_KEY else 'no'}")
-
-    if not NOVA_API_KEY:
-        raise SystemExit("NOVA_API_KEY is missing")
-
-    payload = {
-        "model": LLM_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": "Say Hello GrabResolve in one short line."
-            }
-        ],
-        "max_tokens": 60,
-        "temperature": 0.2
-    }
-
-    request = urllib.request.Request(
-        f"{NOVA_BASE_URL.rstrip('/')}/chat/completions",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {NOVA_API_KEY}"
-        },
-        method="POST"
-    )
+    print(f"Bearer key loaded: {'yes' if NOVA_API_KEY else 'no'}")
 
     try:
-        with urllib.request.urlopen(request, timeout=NOVA_TIMEOUT_SECONDS) as response:
-            body = response.read().decode("utf-8")
-            print(f"HTTP status: {response.status}")
-            print("Response body:")
-            print(body)
-    except urllib.error.HTTPError as exc:
-        body = exc.read().decode("utf-8", errors="replace")
-        print(f"HTTP status: {exc.code}")
-        print(f"Reason: {exc.reason}")
-        print("Raw error body:")
-        print(body)
-        raise SystemExit(1)
-    except urllib.error.URLError as exc:
-        print(f"Connection error: {exc.reason}")
+        text = client.chat_text(
+            "You are a concise assistant.",
+            "Say Hello GrabResolve in one short line.",
+            max_tokens=60
+        )
+        print("Response:")
+        print(text)
+    except Exception as exc:
+        print(f"LLM test failed: {exc}")
         raise SystemExit(1)
 
 

@@ -3,6 +3,7 @@ Investigator Agent - Autonomously queries multiple data sources.
 """
 import json
 
+from config import DATA_DIR
 from llm_client import client
 
 
@@ -12,11 +13,11 @@ class InvestigatorAgent:
 
     def _load_data(self):
         try:
-            with open("data/sample_trips.json", "r", encoding="utf-8") as handle:
+            with open(f"{DATA_DIR}/sample_trips.json", "r", encoding="utf-8") as handle:
                 self.trips_db = json.load(handle)
-            with open("data/sample_drivers.json", "r", encoding="utf-8") as handle:
+            with open(f"{DATA_DIR}/sample_drivers.json", "r", encoding="utf-8") as handle:
                 self.drivers_db = json.load(handle)
-            with open("data/sample_tickets.json", "r", encoding="utf-8") as handle:
+            with open(f"{DATA_DIR}/sample_tickets.json", "r", encoding="utf-8") as handle:
                 self.tickets_db = json.load(handle)
         except FileNotFoundError:
             self.trips_db = []

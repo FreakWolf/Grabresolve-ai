@@ -15,7 +15,7 @@ from agents.investigator_agent import InvestigatorAgent
 from agents.root_cause_agent import RootCauseAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.prediction_agent import PredictionAgent
-from config import AUTO_RESOLVE_CONFIDENCE, HUMAN_REVIEW_THRESHOLD, ESCALATION_THRESHOLD
+from config import AUTO_RESOLVE_CONFIDENCE, HUMAN_REVIEW_THRESHOLD, ESCALATION_THRESHOLD, DATA_DIR
 
 # Initialize FastAPI
 app = FastAPI(
@@ -53,6 +53,9 @@ class TicketInput(BaseModel):
     category: Optional[str] = None
     channel: Optional[str] = "app"
     country: Optional[str] = "Singapore"
+    city: Optional[str] = None
+    priority: Optional[str] = None
+    subcategory: Optional[str] = None
     trip_id: Optional[str] = None
     order_id: Optional[str] = None
     driver_id: Optional[str] = None
@@ -65,6 +68,7 @@ class InvestigationResult(BaseModel):
     investigation: Dict
     root_cause: Dict
     resolution: Dict
+    sla_prediction: Dict
     confidence_score: float
     auto_resolved: bool
     processing_time_seconds: float
@@ -166,6 +170,20 @@ async def investigate_ticket(ticket: TicketInput):
             )
             print(f"   🔴 ESCALATED to senior agent")
 
+        # ============================
+        # STEP 5: SLA PREDICTION
+        # ============================
+        print(f"Step 5: Predicting SLA risk for {ticket.ticket_id}...")
+        sla_prediction = await prediction_agent.predict_sla_breach(ticket)
+        evidence_trail.append(
+            f"[SLA Prediction] {sla_prediction['risk_level']} risk "
+            f"({sla_prediction['sla_breach_probability']:.0%} probability)"
+        )
+        print(
+            f"   SLA risk: {sla_prediction['risk_level']} "
+            f"({sla_prediction['sla_breach_probability']:.0%})"
+        )
+
         processing_time = time.time() - start_time
 
         print(f"\n✅ Investigation complete for {ticket.ticket_id} "
@@ -177,6 +195,7 @@ async def investigate_ticket(ticket: TicketInput):
             investigation=investigation,
             root_cause=root_cause,
             resolution=resolution,
+            sla_prediction=sla_prediction,
             confidence_score=confidence,
             auto_resolved=auto_resolved,
             processing_time_seconds=round(processing_time, 2),
@@ -258,7 +277,7 @@ async def get_analytics():
 async def get_sample_tickets():
     """Serve sample tickets for the frontend"""
     try:
-        with open("data/sample_tickets.json", "r") as f:
+        with open(f"{DATA_DIR}/sample_tickets.json", "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Sample tickets not found")
