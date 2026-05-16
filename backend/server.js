@@ -7,7 +7,7 @@ const PORT = 5000;
 const AI_ENGINE = 'http://localhost:8000';
 const LIVE_ANALYTICS_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// ⬇️ ADDED: Centralized timeout config (3 minutes)
+// Centralized timeout config (3 minutes for vision-enabled investigations)
 const AI_REQUEST_TIMEOUT_MS = 180000;
 
 const RESOLVED_STATUSES = new Set([
@@ -18,10 +18,14 @@ const RESOLVED_STATUSES = new Set([
 ]);
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // larger limit for evidence URLs
 
 let ticketsDB = [];
 let investigationsDB = [];
+
+// ============================================================
+// HELPERS
+// ============================================================
 
 function asNumber(value) {
     const num = Number(value);
@@ -56,6 +60,27 @@ function safeDate(raw) {
     return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
+// Build the full payload sent to AI engine, including evidence
+function buildAIPayload(ticket) {
+    return {
+        ticket_id: ticket.ticket_id,
+        subject: ticket.subject,
+        description: ticket.description,
+        customer_id: ticket.customer_id,
+        driver_id: ticket.driver_id,
+        merchant_id: ticket.merchant_id,
+        trip_id: ticket.trip_id,
+        order_id: ticket.order_id,
+        category: ticket.category,
+        subcategory: ticket.subcategory,
+        channel: ticket.channel,
+        country: ticket.country,
+        city: ticket.city,
+        priority: ticket.priority,
+        evidence: ticket.evidence || []  // critical for vision validation
+    };
+}
+
 function analyticsFromState() {
     const statusCounts = {
         open: 0, investigating: 0, auto_resolved: 0,
@@ -71,8 +96,8 @@ function analyticsFromState() {
     let processed = 0;
     let evidenceTrailCount = 0;
     let totalResolutionSeconds = 0;
-    let totalTokensUsed = 0;  // ⬅️ ADDED
-    let ticketsWithTokens = 0; // ⬅️ ADDED
+    let totalTokensUsed = 0;
+    let ticketsWithTokens = 0;
 
     ticketsDB.forEach(ticket => {
         const status = ticketStatus(ticket);
@@ -117,7 +142,6 @@ function analyticsFromState() {
         if (investigation?.evidence?.length) evidenceTrailCount += 1;
         if (ticket.processing_time) totalResolutionSeconds += asNumber(ticket.processing_time);
 
-        // ⬇️ ADDED: Aggregate token usage
         if (investigation?.token_usage?.total_tokens) {
             totalTokensUsed += investigation.token_usage.total_tokens;
             ticketsWithTokens += 1;
@@ -156,7 +180,6 @@ function analyticsFromState() {
                 escalated: escalatedCount,
                 investigating: statusCounts.investigating,
                 open: statusCounts.open,
-                // ⬇️ ADDED: Token metrics
                 total_tokens_used: totalTokensUsed,
                 avg_tokens_per_ticket: ticketsWithTokens > 0
                     ? Math.round(totalTokensUsed / ticketsWithTokens) : 0
@@ -213,15 +236,22 @@ function systemicIssuesFromState() {
         }));
 }
 
+// ============================================================
+// HEALTH
+// ============================================================
 app.get('/api/health', (req, res) => {
     res.json({
         status: 'healthy',
         service: 'GrabResolve Backend',
+        version: '2.3.0',
         tickets_count: ticketsDB.length,
         investigations_count: investigationsDB.length
     });
 });
 
+// ============================================================
+// TICKETS
+// ============================================================
 app.get('/api/tickets', (req, res) => {
     const sorted = [...ticketsDB].sort(
         (a, b) => new Date(b.created_at) - new Date(a.created_at)
@@ -241,7 +271,11 @@ app.get('/api/tickets/:id', (req, res) => {
 
 app.post('/api/tickets', (req, res) => {
     const existing = ticketsDB.find(t => t.ticket_id === req.body.ticket_id);
-    if (existing) return res.json(existing);
+    if (existing) {
+        // Allow updating evidence on an existing ticket (for live demo flows)
+        if (req.body.evidence) existing.evidence = req.body.evidence;
+        return res.json(existing);
+    }
 
     const ticket = {
         ...req.body,
@@ -254,33 +288,30 @@ app.post('/api/tickets', (req, res) => {
     res.status(201).json(ticket);
 });
 
+// ============================================================
+// INVESTIGATION (now accepts body to merge live data + evidence)
+// ============================================================
 app.post('/api/tickets/:id/investigate', async (req, res) => {
     try {
         const ticket = ticketsDB.find(t => t.ticket_id === req.params.id);
         if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
+        // Merge incoming body (e.g., from LiveDemo with evidence) into ticket.
+        // Body fields take priority, allowing the demo to push fresh data.
+        if (req.body && Object.keys(req.body).length > 0) {
+            Object.assign(ticket, req.body);
+        }
+
         ticket.status = 'investigating';
         console.log(`\nSending ${ticket.ticket_id} to AI Engine...`);
+        if (ticket.evidence?.length) {
+            console.log(`   📸 ${ticket.evidence.length} evidence items attached for vision validation`);
+        }
 
         const aiResponse = await axios.post(
             `${AI_ENGINE}/api/investigate`,
-            {
-                ticket_id: ticket.ticket_id,
-                subject: ticket.subject,
-                description: ticket.description,
-                customer_id: ticket.customer_id,
-                driver_id: ticket.driver_id,
-                merchant_id: ticket.merchant_id,
-                trip_id: ticket.trip_id,
-                order_id: ticket.order_id,
-                category: ticket.category,
-                subcategory: ticket.subcategory,
-                channel: ticket.channel,
-                country: ticket.country,
-                city: ticket.city,
-                priority: ticket.priority
-            },
-            { timeout: AI_REQUEST_TIMEOUT_MS }  // ⬅️ CHANGED: 60000 → 180000
+            buildAIPayload(ticket),
+            { timeout: AI_REQUEST_TIMEOUT_MS }
         );
 
         const result = aiResponse.data;
@@ -288,7 +319,7 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
         ticket.confidence_score = result.confidence_score;
         ticket.auto_resolved = ticket.status === 'auto_resolved';
         ticket.processing_time = result.processing_time_seconds;
-        ticket.token_usage = result.token_usage;  // ⬅️ ADDED
+        ticket.token_usage = result.token_usage;
         ticket.resolved_at = new Date().toISOString();
 
         investigationsDB = investigationsDB.filter(i => i.ticket_id !== ticket.ticket_id);
@@ -302,6 +333,11 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
         if (result.token_usage) {
             console.log(`   💰 Tokens: ${result.token_usage.total_tokens} ` +
                         `(${result.token_usage.calls_made} calls)`);
+        }
+        if (result.evidence_validation?.evidence_count > 0) {
+            console.log(`   👁️  Vision: ${result.evidence_validation.evidence_count} items, ` +
+                        `${result.evidence_validation.supports_claim} ` +
+                        `(credibility: ${result.evidence_validation.overall_credibility})`);
         }
 
         res.json({
@@ -322,6 +358,9 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
     }
 });
 
+// ============================================================
+// ACTIONS
+// ============================================================
 app.post('/api/tickets/:id/approve', (req, res) => {
     const ticket = ticketsDB.find(t => t.ticket_id === req.params.id);
     if (!ticket) return res.status(404).json({ error: 'Not found' });
@@ -343,10 +382,13 @@ app.post('/api/tickets/:id/escalate', (req, res) => {
     res.json({ message: 'Escalated', ticket });
 });
 
+// ============================================================
+// SEED
+// ============================================================
 app.post('/api/seed', async (req, res) => {
     try {
         const response = await axios.get(`${AI_ENGINE}/api/sample-tickets`, {
-            timeout: 10000  // ⬅️ ADDED
+            timeout: 10000
         });
         const sampleTickets = response.data;
 
@@ -374,6 +416,9 @@ app.post('/api/seed', async (req, res) => {
     }
 });
 
+// ============================================================
+// BATCH INVESTIGATE
+// ============================================================
 app.post('/api/investigate-all', async (req, res) => {
     const openTickets = ticketsDB.filter(t => t.status === 'open');
     const results = [];
@@ -384,23 +429,8 @@ app.post('/api/investigate-all', async (req, res) => {
         try {
             const aiResponse = await axios.post(
                 `${AI_ENGINE}/api/investigate`,
-                {
-                    ticket_id: ticket.ticket_id,
-                    subject: ticket.subject,
-                    description: ticket.description,
-                    customer_id: ticket.customer_id,
-                    driver_id: ticket.driver_id,
-                    merchant_id: ticket.merchant_id,
-                    trip_id: ticket.trip_id,
-                    order_id: ticket.order_id,
-                    category: ticket.category,
-                    subcategory: ticket.subcategory,
-                    channel: ticket.channel,
-                    country: ticket.country,
-                    city: ticket.city,
-                    priority: ticket.priority
-                },
-                { timeout: AI_REQUEST_TIMEOUT_MS }  // ⬅️ CHANGED
+                buildAIPayload(ticket),
+                { timeout: AI_REQUEST_TIMEOUT_MS }
             );
 
             const result = aiResponse.data;
@@ -408,7 +438,7 @@ app.post('/api/investigate-all', async (req, res) => {
             ticket.confidence_score = result.confidence_score;
             ticket.auto_resolved = ticket.status === 'auto_resolved';
             ticket.processing_time = result.processing_time_seconds;
-            ticket.token_usage = result.token_usage;  // ⬅️ ADDED
+            ticket.token_usage = result.token_usage;
             ticket.resolved_at = new Date().toISOString();
 
             investigationsDB = investigationsDB.filter(i => i.ticket_id !== ticket.ticket_id);
@@ -422,7 +452,8 @@ app.post('/api/investigate-all', async (req, res) => {
                 ticket_id: ticket.ticket_id,
                 status: ticket.status,
                 confidence: result.confidence_score,
-                tokens_used: result.token_usage?.total_tokens || 0,  // ⬅️ ADDED
+                tokens_used: result.token_usage?.total_tokens || 0,
+                evidence_validated: result.evidence_validation?.evidence_count || 0,
                 success: true
             });
         } catch (err) {
@@ -436,18 +467,50 @@ app.post('/api/investigate-all', async (req, res) => {
         }
     }
 
-    // ⬇️ ADDED: Batch token summary
     const totalTokens = results.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
 
     res.json({
         message: `Processed ${openTickets.length} tickets`,
         succeeded: results.filter(r => r.success).length,
         failed: results.filter(r => !r.success).length,
-        total_tokens_used: totalTokens,  // ⬅️ ADDED
+        total_tokens_used: totalTokens,
         results
     });
 });
 
+// ============================================================
+// EVIDENCE VALIDATION (NEW - proxy to AI engine)
+// ============================================================
+app.post('/api/evidence/validate', async (req, res) => {
+    try {
+        if (!req.body || !req.body.ticket_id) {
+            return res.status(400).json({
+                error: 'ticket_id and evidence are required in request body'
+            });
+        }
+
+        console.log(`\n👁️  Evidence-only validation for ${req.body.ticket_id}`);
+
+        const aiResponse = await axios.post(
+            `${AI_ENGINE}/api/evidence-validate`,
+            req.body,
+            { timeout: AI_REQUEST_TIMEOUT_MS }
+        );
+
+        res.json(aiResponse.data);
+    } catch (err) {
+        console.error('Evidence validation error:', err.message);
+        res.status(500).json({
+            error: 'Evidence validation failed',
+            details: err.message,
+            tip: 'Make sure AI Engine is running on port 8000 with v2.3'
+        });
+    }
+});
+
+// ============================================================
+// ANALYTICS
+// ============================================================
 app.get('/api/analytics/overview', (req, res) => {
     try {
         res.json(analyticsFromState());
@@ -467,7 +530,9 @@ app.get('/api/analytics/systemic', (req, res) => {
     }
 });
 
-// ⬇️ ADDED: New endpoint for per-ticket token lookup
+// ============================================================
+// TOKENS (per-ticket lookup)
+// ============================================================
 app.get('/api/tickets/:id/tokens', (req, res) => {
     const investigation = investigationFor(req.params.id);
     if (!investigation || !investigation.token_usage) {
@@ -476,20 +541,53 @@ app.get('/api/tickets/:id/tokens', (req, res) => {
     res.json(investigation.token_usage);
 });
 
-// ⬇️ CHANGED: Capture server reference to set timeouts
+// ============================================================
+// POLICIES (NEW - proxy to AI engine)
+// ============================================================
+app.get('/api/policies', async (req, res) => {
+    try {
+        const aiResponse = await axios.get(`${AI_ENGINE}/api/policies`, {
+            timeout: 10000
+        });
+        res.json(aiResponse.data);
+    } catch (err) {
+        res.status(500).json({
+            error: 'Failed to fetch policies',
+            details: err.message
+        });
+    }
+});
+
+app.post('/api/policies/reload', async (req, res) => {
+    try {
+        const aiResponse = await axios.post(`${AI_ENGINE}/api/policies/reload`, {}, {
+            timeout: 10000
+        });
+        res.json(aiResponse.data);
+    } catch (err) {
+        res.status(500).json({
+            error: 'Failed to reload policies',
+            details: err.message
+        });
+    }
+});
+
+// ============================================================
+// SERVER START
+// ============================================================
 const server = app.listen(PORT, () => {
     console.log('');
     console.log('='.repeat(50));
-    console.log('GrabResolve Backend Started (No MongoDB!)');
+    console.log('GrabResolve Backend v2.3 Started (No MongoDB!)');
     console.log('='.repeat(50));
     console.log(`Server: http://localhost:${PORT}`);
     console.log(`AI Engine: ${AI_ENGINE}`);
     console.log(`AI Request Timeout: ${AI_REQUEST_TIMEOUT_MS / 1000}s`);
+    console.log(`Features: tickets, vision_evidence, policies, analytics`);
     console.log('='.repeat(50));
     console.log('');
 });
 
-// ⬇️ ADDED: Express server-level timeouts
-server.timeout = 200000;          // 200s overall
+server.timeout = 200000;
 server.keepAliveTimeout = 200000;
-server.headersTimeout = 210000;   // must exceed keepAliveTimeout
+server.headersTimeout = 210000;

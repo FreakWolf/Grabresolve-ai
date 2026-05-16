@@ -1,6 +1,8 @@
 """
-Evidence Agent - Validates pre-attached evidence against customer claims.
-Each ticket comes with evidence already attached - we just verify it.
+Evidence Agent v3.0 - Nova-Optimized Batched Vision Validation
+
+Validates ALL ticket evidence in a SINGLE multimodal Nova call.
+Massively reduces token cost and rate limit consumption.
 """
 import json
 from typing import List, Dict
@@ -9,191 +11,351 @@ from token_tracker import get_tracker
 
 
 class EvidenceAgent:
-    """
-    Validates pre-attached evidence files for ticket claims.
-    Determines if evidence supports, contradicts, or is unrelated to the claim.
-    """
+    """Vision-based evidence validator using Nova multimodal API."""
+
+    EVIDENCE_REQUIRED_CATEGORIES = {
+        "missing_items", "damaged_delivery", "package_damaged",
+        "wrong_delivery", "safety_critical", "delivery_issue"
+    }
+
+    VISION_TYPES = {"image", "photo", "screenshot"}
+    DOCUMENT_TYPES = {"document", "pdf", "receipt", "invoice"}
+
+    MAX_IMAGES_PER_REQUEST = 10
+    MAX_DOCUMENTS_PER_REQUEST = 5
 
     async def validate(self, ticket, classification: dict, investigation: dict) -> dict:
-        """
-        Main entry point - validates all evidence attached to a ticket.
-        Returns validation report.
-        """
+        """Main entry: validates all ticket evidence in ONE Nova call."""
         evidence_list = self._get_evidence(ticket)
+        category = classification.get("category", "")
+        evidence_required = category in self.EVIDENCE_REQUIRED_CATEGORIES
 
         if not evidence_list:
-            return {
-                "evidence_count": 0,
-                "evidence_provided": False,
-                "validations": [],
-                "overall_credibility": "unknown",
-                "supports_claim": "no_evidence",
-                "credibility_score": 0.0,
-                "red_flags": [],
-                "summary": "No evidence provided - relying on text description only"
-            }
+            return self._no_evidence_result(category, evidence_required)
 
-        # Validate each piece of evidence
-        validations = []
-        for evidence in evidence_list:
-            try:
-                validation = await self._validate_single(
-                    evidence, ticket, classification, investigation
-                )
-                validations.append(validation)
-            except Exception as e:
-                print(f"   ⚠️ Evidence validation failed: {e}")
-                validations.append({
-                    "evidence_id": evidence.get("id", "unknown"),
-                    "filename": evidence.get("filename", "unknown"),
-                    "valid": False,
-                    "credibility": "could_not_verify",
-                    "supports_claim": "unknown",
-                    "error": str(e)
-                })
+        # Split images vs documents
+        images = [
+            e for e in evidence_list
+            if (e.get("type") or "").lower() in self.VISION_TYPES
+        ]
+        documents = [
+            e for e in evidence_list
+            if (e.get("type") or "").lower() in self.DOCUMENT_TYPES
+        ]
 
-        # Aggregate results
-        return self._aggregate_validations(validations, evidence_list, ticket, classification)
+        truncation_notes = []
+        if len(images) > self.MAX_IMAGES_PER_REQUEST:
+            truncation_notes.append(
+                f"images truncated: {len(images)} → {self.MAX_IMAGES_PER_REQUEST}"
+            )
+            images = images[:self.MAX_IMAGES_PER_REQUEST]
+        if len(documents) > self.MAX_DOCUMENTS_PER_REQUEST:
+            truncation_notes.append(
+                f"docs truncated: {len(documents)} → {self.MAX_DOCUMENTS_PER_REQUEST}"
+            )
+            documents = documents[:self.MAX_DOCUMENTS_PER_REQUEST]
+
+        # Filter out evidence without URLs
+        images = [e for e in images if e.get("url")]
+        documents = [e for e in documents if e.get("url")]
+
+        if not images and not documents:
+            return self._no_evidence_result(
+                category, evidence_required,
+                summary="Evidence attached but no valid URLs found"
+            )
+
+        # ONE batched vision call
+        try:
+            validations = await self._batch_validate(
+                images, documents, ticket, classification, investigation
+            )
+        except Exception as exc:
+            print(f"   ⚠️ Batch evidence validation failed: {exc}")
+            return self._failure_result(evidence_list, evidence_required, str(exc))
+
+        result = self._aggregate_validations(
+            validations, evidence_list, ticket, classification, evidence_required
+        )
+        if truncation_notes:
+            result["truncation_notes"] = truncation_notes
+        return result
 
     def _get_evidence(self, ticket) -> List[Dict]:
-        """Extract pre-attached evidence from ticket."""
         if hasattr(ticket, "evidence") and ticket.evidence:
             return ticket.evidence
         if hasattr(ticket, "attachments") and ticket.attachments:
             return ticket.attachments
         return []
 
-    async def _validate_single(
-        self, evidence: Dict, ticket, classification: dict, investigation: dict
-    ) -> Dict:
-        """
-        Validate a single piece of evidence using LLM reasoning.
-        """
-        evidence_id = evidence.get("id", "unknown")
-        filename = evidence.get("filename", "")
-        ev_type = evidence.get("type", "")
-        description = evidence.get("description", "")
-        claimed_content = evidence.get("claimed_content", "")
-        metadata = evidence.get("metadata", {})
+    async def _batch_validate(
+        self, images: List[Dict], documents: List[Dict],
+        ticket, classification: dict, investigation: dict
+    ) -> List[Dict]:
+        """SINGLE Nova call validating all evidence at once."""
+        category = classification.get("category", "")
+        category_focus = self._get_category_focus(category)
+
+        # Build evidence manifest
+        all_evidence = []
+        for i, ev in enumerate(images):
+            all_evidence.append({
+                "index": i,
+                "kind": "image",
+                "id": ev.get("id", f"img_{i}"),
+                "filename": ev.get("filename", ""),
+                "customer_description": ev.get("description", ""),
+                "customer_claims_shows": ev.get("claimed_content", ""),
+                "metadata": ev.get("metadata", {})
+            })
+        for j, ev in enumerate(documents):
+            all_evidence.append({
+                "index": len(images) + j,
+                "kind": "document",
+                "id": ev.get("id", f"doc_{j}"),
+                "filename": ev.get("filename", ""),
+                "customer_description": ev.get("description", ""),
+                "customer_claims_shows": ev.get("claimed_content", ""),
+                "metadata": ev.get("metadata", {})
+            })
 
         system_prompt = (
-            "You are an evidence validation specialist for Grab support. "
-            "Your job is to determine if pre-attached evidence supports a customer's claim. "
-            "Be skeptical but fair. Return strict JSON only."
+            "You are a forensic evidence analyst for Grab support. "
+            "You will receive multiple images and/or documents attached to a single "
+            "support ticket. Examine EACH ONE in order and validate the customer's claim. "
+            "Be objective and skeptical of inconsistencies. "
+            "Return ONLY a strict JSON object - no markdown, no commentary."
         )
 
         user_prompt = f"""
-Validate this evidence against the customer's claim.
+Validate {len(all_evidence)} pieces of evidence for this support ticket.
 
 CUSTOMER CLAIM:
 - Subject: {ticket.subject}
 - Description: {ticket.description}
-- Category: {classification.get('category')}
-- Country: {ticket.country}
+- Category: {category}
+- Country: {getattr(ticket, 'country', 'Unknown')}
 
-EVIDENCE TO VALIDATE:
-- File: {filename}
-- Type: {ev_type}
-- Description: {description}
-- Claimed Content: {claimed_content}
-- Upload time: {metadata.get('uploaded_at', 'unknown')}
+WHAT TO LOOK FOR ({category}):
+{category_focus}
+
+EVIDENCE MANIFEST (analyze attached files in this order):
+{json.dumps(all_evidence, indent=2)[:2500]}
 
 INVESTIGATION CONTEXT:
-- Findings: {json.dumps(investigation.get('findings', []), indent=2)[:600]}
+- Findings so far: {json.dumps(investigation.get('findings', []), indent=2)[:600]}
 - Data sources: {investigation.get('data_sources', [])}
 
-Respond in this EXACT JSON format:
+The attached files appear in the same order as the manifest above.
+Return this EXACT JSON structure:
+
 {{
-  "valid": true,
-  "credibility": "high",
-  "supports_claim": "yes",
-  "key_observations": ["observation 1", "observation 2"],
-  "red_flags": [],
-  "confidence": 0.85,
-  "verdict": "Brief one-sentence assessment"
+  "overall_assessment": {{
+    "supports_claim": "yes" | "no" | "partial" | "inconclusive",
+    "credibility": "high" | "medium" | "low" | "suspicious",
+    "confidence": 0.0,
+    "summary": "<one paragraph overall finding>",
+    "critical_red_flags": ["<inconsistencies across evidence>"]
+  }},
+  "validations": [
+    {{
+      "evidence_index": 0,
+      "evidence_id": "<id from manifest>",
+      "image_describes": "<what you actually see, 1-2 sentences>",
+      "matches_claim": "yes" | "partial" | "no" | "unclear",
+      "credibility": "high" | "medium" | "low" | "suspicious",
+      "supports_claim": "yes" | "no" | "partial" | "unrelated",
+      "key_observations": ["specific detail 1", "specific detail 2"],
+      "red_flags": ["any inconsistency, manipulation sign, mismatch"],
+      "confidence": 0.0,
+      "verdict": "<one-sentence assessment>"
+    }}
+  ]
 }}
 
-Validation criteria:
-- HIGH credibility: Clear, relevant, content matches description
-- MEDIUM credibility: Related but unclear, partial support
-- LOW credibility: Tangential, unclear connection to claim
-- SUSPICIOUS: Doesn't match claim, contradicts other data
-
-For supports_claim: "yes", "no", "partial", or "unrelated"
+Be specific. If you see 2 burgers but customer claims 3 ordered with 1 missing, say so.
+If image quality is poor or location seems wrong, flag it.
+If documents (receipts/reports) contradict customer's claim, flag it.
 """
 
-        try:
-            result = client.json_response(
-                system_prompt, user_prompt,
-                max_tokens=400
+        image_urls = [ev["url"] for ev in images]
+        document_specs = [
+            {
+                "url": ev["url"],
+                "name": ev.get("filename", "document"),
+                "format": self._infer_doc_format(ev.get("filename", ""))
+            }
+            for ev in documents
+        ]
+
+        # Make the call
+        if document_specs:
+            response = client.vision_with_documents(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_urls=image_urls,
+                document_urls=document_specs,
+                max_tokens=2000
+            )
+        else:
+            response = client.vision_json_response(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                image_urls=image_urls,
+                max_tokens=2000
             )
 
-            # Track token usage
-            tracker = get_tracker(ticket.ticket_id)
-            if tracker:
-                tracker.add_call("evidence_agent", client.last_usage)
+        # Track tokens
+        tracker = get_tracker(ticket.ticket_id)
+        if tracker:
+            tracker.add_call("evidence_batch_vision", client.last_usage)
 
-            # Add original evidence info
-            result["evidence_id"] = evidence_id
-            result["filename"] = filename
-            result["type"] = ev_type
-            result["description"] = description
-            result["claimed_content"] = claimed_content
+        # Validate response shape
+        validations = response.get("validations", [])
+        overall = response.get("overall_assessment", {})
 
-            return result
+        # Enrich each validation with original evidence info
+        enriched = []
+        all_input = images + documents
+        for i, ev in enumerate(all_input):
+            matched = None
+            for v in validations:
+                if (v.get("evidence_index") == i or
+                        v.get("evidence_id") == ev.get("id")):
+                    matched = v
+                    break
 
-        except Exception as exc:
-            tracker = get_tracker(ticket.ticket_id)
-            if tracker and client.last_usage:
-                tracker.add_call("evidence_agent_failed", client.last_usage)
+            if matched:
+                matched["evidence_id"] = ev.get("id", f"ev_{i}")
+                matched["filename"] = ev.get("filename", "")
+                matched["type"] = ev.get("type", "")
+                matched["url"] = ev.get("url", "")
+                matched["analyzed_method"] = "vision_batch"
+                matched["vision_used"] = True
+                enriched.append(matched)
+            else:
+                enriched.append({
+                    "evidence_id": ev.get("id", f"ev_{i}"),
+                    "filename": ev.get("filename", ""),
+                    "type": ev.get("type", ""),
+                    "url": ev.get("url", ""),
+                    "credibility": "could_not_verify",
+                    "supports_claim": "unknown",
+                    "matches_claim": "unclear",
+                    "key_observations": [],
+                    "red_flags": ["Vision did not return validation for this evidence"],
+                    "confidence": 0.0,
+                    "verdict": "Validation skipped",
+                    "vision_used": False,
+                    "analyzed_method": "vision_batch_skipped"
+                })
 
-            return {
-                "evidence_id": evidence_id,
-                "filename": filename,
-                "type": ev_type,
-                "valid": False,
-                "credibility": "could_not_verify",
-                "supports_claim": "unknown",
-                "key_observations": [],
-                "red_flags": [f"Validation error: {exc}"],
-                "confidence": 0.0,
-                "verdict": "Could not validate due to error"
-            }
+        # Stash overall for aggregation
+        for v in enriched:
+            v["_overall_assessment"] = overall
+
+        return enriched
+
+    def _infer_doc_format(self, filename: str) -> str:
+        ext = filename.lower().rsplit(".", 1)[-1] if "." in filename else "pdf"
+        mapping = {
+            "pdf": "pdf", "csv": "csv", "txt": "txt",
+            "xls": "xls", "xlsx": "xls", "html": "html",
+            "htm": "html", "doc": "doc", "docx": "doc"
+        }
+        return mapping.get(ext, "pdf")
+
+    def _get_category_focus(self, category: str) -> str:
+        focus_map = {
+            "missing_items": (
+                "Count the visible items. Compare to what customer claims was ordered. "
+                "Note packaging - sealed/unsealed? Any space where missing items could fit? "
+                "Cross-check images with receipts/order screenshots."
+            ),
+            "damaged_delivery": (
+                "Look for visible damage: cracks, leaks, dents, broken seals, spillage. "
+                "Is damage consistent with shipping/handling? Note severity. "
+                "Cross-check damage shown vs customer's narrative."
+            ),
+            "package_damaged": (
+                "Examine box condition: dents, crushing, water damage, FRAGILE labels. "
+                "Compare external box damage to internal item damage if both shown. "
+                "Verify high-value items via invoice if attached."
+            ),
+            "wrong_delivery": (
+                "Look at delivery location/doorstep. Compare to any reference image. "
+                "Note door color, mat, surroundings, house number visibility. "
+                "If two location images shown, compare them side-by-side."
+            ),
+            "safety_critical": (
+                "CRITICAL: Look for mold, discoloration, foreign objects, signs of spoilage. "
+                "Note visible health hazards. Check medical reports if attached. "
+                "Verify timeline: prep time vs delivery time on container labels."
+            ),
+            "delivery_issue": (
+                "Examine what was delivered vs what was ordered. Note any discrepancies "
+                "in items, quantities, or quality. Cross-check against receipts."
+            ),
+        }
+        return focus_map.get(
+            category,
+            "Examine carefully and note all relevant details related to the customer's claim."
+        )
+
+    def _no_evidence_result(self, category, required, summary=None):
+        return {
+            "evidence_count": 0,
+            "evidence_provided": False,
+            "evidence_required": required,
+            "validations": [],
+            "overall_credibility": "no_evidence",
+            "supports_claim": "no_evidence",
+            "credibility_score": 0.0,
+            "red_flags": ["No evidence provided"] if required else [],
+            "summary": summary or (
+                f"⚠️ No evidence provided for '{category}' (evidence required)"
+                if required else "No evidence provided - relying on text description"
+            )
+        }
+
+    def _failure_result(self, evidence_list, required, error):
+        return {
+            "evidence_count": len(evidence_list),
+            "evidence_provided": True,
+            "evidence_required": required,
+            "validations": [],
+            "overall_credibility": "could_not_verify",
+            "supports_claim": "unknown",
+            "credibility_score": 0.0,
+            "red_flags": [f"Vision API error: {error}"],
+            "summary": f"⚠️ Could not validate evidence: {error}",
+            "validation_failed": True
+        }
 
     def _aggregate_validations(
         self, validations: List[Dict], evidence_list: List[Dict],
-        ticket, classification: dict
+        ticket, classification: dict, evidence_required: bool
     ) -> Dict:
-        """Combine all validations into overall report."""
         if not validations:
-            return {
-                "evidence_count": 0,
-                "evidence_provided": False,
-                "validations": [],
-                "overall_credibility": "unknown",
-                "supports_claim": "no_evidence",
-                "credibility_score": 0.0,
-                "red_flags": [],
-                "summary": "No evidence to validate"
-            }
+            return self._no_evidence_result(
+                classification.get("category", ""), evidence_required
+            )
 
-        # Calculate credibility score
+        overall = validations[0].get("_overall_assessment", {}) if validations else {}
+
         credibility_weights = {
-            "high": 1.0,
-            "medium": 0.6,
-            "low": 0.3,
-            "suspicious": 0.1,
-            "could_not_verify": 0.0
+            "high": 1.0, "medium": 0.6, "low": 0.3,
+            "suspicious": 0.05, "could_not_verify": 0.0
         }
-
         scores = [
             credibility_weights.get(v.get("credibility", "could_not_verify"), 0.0)
             for v in validations
         ]
         avg_score = sum(scores) / len(scores) if scores else 0.0
 
-        # Overall credibility
-        if avg_score >= 0.8:
+        if overall.get("credibility"):
+            overall_credibility = overall["credibility"]
+        elif avg_score >= 0.8:
             overall_credibility = "high"
         elif avg_score >= 0.5:
             overall_credibility = "medium"
@@ -202,44 +364,59 @@ For supports_claim: "yes", "no", "partial", or "unrelated"
         else:
             overall_credibility = "could_not_verify"
 
-        # Aggregate support
         support_counts = {"yes": 0, "no": 0, "partial": 0, "unrelated": 0, "unknown": 0}
         for v in validations:
-            support = v.get("supports_claim", "unknown")
-            support_counts[support] = support_counts.get(support, 0) + 1
+            s = v.get("supports_claim", "unknown")
+            support_counts[s] = support_counts.get(s, 0) + 1
 
-        # Determine overall support
-        if support_counts["yes"] > support_counts["no"]:
-            overall_support = "supports"
-        elif support_counts["no"] > 0:
+        if overall.get("supports_claim"):
+            overall_support = overall["supports_claim"]
+            if overall_support == "no":
+                overall_support = "contradicts"
+        elif support_counts["no"] >= support_counts["yes"] and support_counts["no"] > 0:
             overall_support = "contradicts"
+        elif support_counts["yes"] > 0 and support_counts["no"] == 0:
+            overall_support = "supports"
         elif support_counts["partial"] > 0:
             overall_support = "partial"
         else:
             overall_support = "inconclusive"
 
-        # Collect all red flags
-        all_red_flags = []
+        all_red_flags = list(overall.get("critical_red_flags", []))
         for v in validations:
-            all_red_flags.extend(v.get("red_flags", []))
+            all_red_flags.extend(v.get("red_flags", []) or [])
 
-        # Generate summary
+        suspicious_count = sum(
+            1 for v in validations if v.get("credibility") == "suspicious"
+        )
+
+        clean_validations = [
+            {k: v for k, v in val.items() if k != "_overall_assessment"}
+            for val in validations
+        ]
+
         summary_parts = [
-            f"{len(validations)} pieces of evidence analyzed",
-            f"overall credibility: {overall_credibility}",
+            f"{len(validations)} pieces analyzed in 1 batched vision call",
+            f"credibility: {overall_credibility}",
             f"claim support: {overall_support}"
         ]
         if all_red_flags:
-            summary_parts.append(f"{len(all_red_flags)} red flags detected")
+            summary_parts.append(f"{len(all_red_flags)} red flags")
+        if suspicious_count > 0:
+            summary_parts.append(f"⚠️ {suspicious_count} SUSPICIOUS")
 
         return {
             "evidence_count": len(validations),
             "evidence_provided": True,
-            "validations": validations,
+            "evidence_required": evidence_required,
+            "validations": clean_validations,
             "overall_credibility": overall_credibility,
             "credibility_score": round(avg_score, 2),
             "supports_claim": overall_support,
             "support_breakdown": support_counts,
-            "red_flags": list(set(all_red_flags))[:5],
-            "summary": " | ".join(summary_parts)
+            "suspicious_count": suspicious_count,
+            "red_flags": list(set(all_red_flags))[:8],
+            "ai_summary": overall.get("summary", ""),
+            "summary": " | ".join(summary_parts),
+            "method": "batched_nova_vision"
         }

@@ -1,12 +1,12 @@
 """
-GrabResolve AI — Main FastAPI Server v2.1
-STRICT MODE: Policy enforcement is mandatory, not advisory.
+GrabResolve AI — Main FastAPI Server v2.3
+STRICT MODE + EVIDENCE: Vision-validated delivery resolution
 """
 
 import asyncio
 import json
 import time
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,14 +18,15 @@ from agents.root_cause_agent import RootCauseAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.prediction_agent import PredictionAgent
 from agents.fraud_agent import FraudAgent
+from agents.evidence_agent import EvidenceAgent
 from policy_engine import policy_engine, PolicyDecision
 from config import AUTO_RESOLVE_CONFIDENCE, HUMAN_REVIEW_THRESHOLD, ESCALATION_THRESHOLD
 from token_tracker import start_tracking, finish_tracking
 
 app = FastAPI(
     title="GrabResolve AI Engine",
-    description="STRICT Governed Investigation & Resolution",
-    version="2.1.0"
+    description="STRICT Governed Investigation & Resolution with Vision Evidence",
+    version="2.3.0"
 )
 
 app.add_middleware(
@@ -42,6 +43,10 @@ root_cause_analyzer = RootCauseAgent()
 resolution_agent = ResolutionAgent()
 prediction_agent = PredictionAgent()
 fraud_agent = FraudAgent()
+evidence_agent = EvidenceAgent()
+
+# Rate limit guard for batch processing (Nova: 20 RPM)
+BATCH_SEMAPHORE = asyncio.Semaphore(3)
 
 
 class TicketInput(BaseModel):
@@ -50,12 +55,16 @@ class TicketInput(BaseModel):
     description: str
     customer_id: str
     category: Optional[str] = None
+    subcategory: Optional[str] = None
     channel: Optional[str] = "app"
     country: Optional[str] = "Singapore"
+    city: Optional[str] = None
+    priority: Optional[str] = "medium"
     trip_id: Optional[str] = None
     order_id: Optional[str] = None
     driver_id: Optional[str] = None
     merchant_id: Optional[str] = None
+    evidence: Optional[List[Dict[str, Any]]] = None
 
 
 class InvestigationResult(BaseModel):
@@ -63,9 +72,10 @@ class InvestigationResult(BaseModel):
     classification: Dict
     investigation: Dict
     fraud_assessment: Dict
+    evidence_validation: Dict
     root_cause: Dict
-    resolution: Dict  # ⬅️ This is now the ENFORCED resolution, not AI's original
-    ai_proposed_resolution: Dict  # ⬅️ NEW: AI's original (for transparency)
+    resolution: Dict
+    ai_proposed_resolution: Dict
     policy_evaluation: Dict
     confidence_score: float
     auto_resolved: bool
@@ -82,28 +92,28 @@ def health_check():
     return {
         "status": "healthy",
         "service": "GrabResolve AI Engine",
-        "version": "2.1.0",
-        "mode": "STRICT",
-        "features": ["classification", "investigation", "fraud_detection", "strict_policy_enforcement"]
+        "version": "2.3.0",
+        "mode": "STRICT + EVIDENCE",
+        "features": [
+            "classification", "investigation", "fraud_detection",
+            "vision_evidence_validation", "strict_policy_enforcement"
+        ]
     }
 
 
 @app.post("/api/investigate", response_model=InvestigationResult)
 async def investigate_ticket(ticket: TicketInput):
     """
-    STRICT MODE pipeline:
-    Classify → Investigate + Fraud + SLA → Root Cause → AI Resolution → POLICY ENFORCEMENT
-
-    Final resolution is ALWAYS the policy-enforced version, not AI's original.
+    STRICT MODE pipeline with vision evidence:
+      Classify → Investigate + Fraud + SLA + Evidence (vision) → Root Cause →
+      AI Resolution → POLICY ENFORCEMENT (strict, evidence-aware)
     """
     start_time = time.time()
     evidence_trail = []
     tracker = start_tracking(ticket.ticket_id)
 
     try:
-        # ============================
         # STEP 1: CLASSIFICATION
-        # ============================
         print(f"\n🧠 Step 1: Classifying {ticket.ticket_id}...")
         classification = await classifier.classify(ticket)
         evidence_trail.append(
@@ -112,9 +122,7 @@ async def investigate_ticket(ticket: TicketInput):
         )
         print(f"   ✅ {classification['category']}")
 
-        # ============================
         # STEP 2: PARALLEL (Investigation + Fraud + SLA)
-        # ============================
         print(f"🔍 Step 2: Investigation + Fraud + SLA in parallel...")
         investigation, fraud_assessment, sla_prediction = await asyncio.gather(
             investigator.investigate(ticket, classification),
@@ -122,7 +130,6 @@ async def investigate_ticket(ticket: TicketInput):
             prediction_agent.predict_sla_breach(ticket)
         )
 
-        # Re-run fraud with full investigation if high risk
         if fraud_assessment["fraud_score"] > 0.4:
             fraud_assessment = await fraud_agent.assess(ticket, classification, investigation)
 
@@ -131,38 +138,49 @@ async def investigate_ticket(ticket: TicketInput):
             f"{len(investigation['findings'])} findings"
         )
         evidence_trail.append(
-            f"[Fraud] Score: {fraud_assessment['fraud_score']:.2f} ({fraud_assessment['risk_level']})"
+            f"[Fraud] Score: {fraud_assessment['fraud_score']:.2f} "
+            f"({fraud_assessment['risk_level']})"
         )
         for factor in fraud_assessment.get('risk_factors', []):
             evidence_trail.append(f"[Fraud Factor] {factor['factor']}: {factor['detail']}")
 
         print(f"   ✅ {len(investigation['findings'])} findings")
-        print(f"   🛡️ Fraud: {fraud_assessment['fraud_score']:.2f} ({fraud_assessment['risk_level']})")
+        print(f"   🛡️ Fraud: {fraud_assessment['fraud_score']:.2f} "
+              f"({fraud_assessment['risk_level']})")
 
-        # ============================
+        # STEP 2.5: EVIDENCE VALIDATION (Vision)
+        print(f"👁️  Step 2.5: Vision-based evidence validation...")
+        evidence_validation = await evidence_agent.validate(
+            ticket, classification, investigation
+        )
+        evidence_trail.append(f"[Evidence] {evidence_validation['summary']}")
+        for flag in evidence_validation.get("red_flags", [])[:5]:
+            evidence_trail.append(f"[Evidence Red Flag] {flag}")
+        print(f"   👁️  Evidence: {evidence_validation['supports_claim']} | "
+              f"credibility: {evidence_validation['overall_credibility']} | "
+              f"score: {evidence_validation['credibility_score']}")
+
+        # Make evidence available to root cause / resolution
+        investigation["evidence_validation"] = evidence_validation
+
         # STEP 3: ROOT CAUSE
-        # ============================
-        print(f"🎯 Step 3: Root cause analysis...")
+        print(f"🎯 Step 3: Root cause analysis (with evidence)...")
         root_cause = await root_cause_analyzer.analyze(ticket, classification, investigation)
         evidence_trail.append(
             f"[Root Cause] {root_cause['primary_cause']} ({root_cause['confidence']:.0%})"
         )
         print(f"   ✅ {root_cause['primary_cause']} ({root_cause['confidence']:.0%})")
 
-        # ============================
         # STEP 4: AI RESOLUTION (Proposal Only)
-        # ============================
         print(f"⚡ Step 4: AI generating resolution proposal...")
         ai_resolution = await resolution_agent.resolve(
             ticket, classification, investigation, root_cause
         )
-        ai_proposed_resolution = dict(ai_resolution)  # ⬅️ Save AI's original
+        ai_proposed_resolution = dict(ai_resolution)
         print(f"   📝 AI proposes: {ai_resolution.get('action', 'unknown')}")
 
-        # ============================
-        # STEP 5: STRICT POLICY ENFORCEMENT
-        # ============================
-        print(f"📜 Step 5: STRICT policy enforcement...")
+        # STEP 5: STRICT POLICY ENFORCEMENT (with evidence)
+        print(f"📜 Step 5: STRICT policy enforcement (evidence-aware)...")
         customer_history = fraud_assessment["customer_history"]
         policy_result = policy_engine.evaluate(
             ticket=ticket,
@@ -171,10 +189,10 @@ async def investigate_ticket(ticket: TicketInput):
             root_cause=root_cause,
             resolution=ai_resolution,
             fraud_assessment=fraud_assessment,
-            customer_history=customer_history
+            customer_history=customer_history,
+            evidence_validation=evidence_validation
         )
 
-        # ⬇️ STRICT: Use the ENFORCED resolution, not AI's original
         enforced_resolution = policy_result.enforced_resolution
         policy_summary = policy_result.summary()
 
@@ -190,32 +208,25 @@ async def investigate_ticket(ticket: TicketInput):
         for reason in policy_summary.get('blocked_reasons', []):
             evidence_trail.append(f"[Block Reason] {reason}")
 
-        # ============================
-        # FINAL DECISION (Based on STRICT enforcement)
-        # ============================
+        # FINAL DECISION
         confidence = root_cause['confidence']
         decision = policy_result.decision
         blocked_by_policy = decision == PolicyDecision.BLOCK
         requires_human = policy_result.requires_human
 
-        # Set status based on STRICT policy decision
         if decision == PolicyDecision.BLOCK:
             enforced_resolution['status'] = 'blocked'
             auto_resolved = False
             print(f"   🚫 BLOCKED BY POLICY")
-
         elif decision == PolicyDecision.ESCALATE:
             enforced_resolution['status'] = 'escalated'
             auto_resolved = False
             print(f"   🔴 ESCALATED BY POLICY")
-
         elif decision == PolicyDecision.MODIFY:
             enforced_resolution['status'] = 'human_review'
             auto_resolved = False
             print(f"   🟡 MODIFIED + HUMAN REVIEW")
-
         elif decision == PolicyDecision.APPROVE:
-            # Even with APPROVE, check confidence one more time
             if confidence >= AUTO_RESOLVE_CONFIDENCE:
                 enforced_resolution['status'] = 'auto_resolved'
                 auto_resolved = True
@@ -224,7 +235,6 @@ async def investigate_ticket(ticket: TicketInput):
                 enforced_resolution['status'] = 'human_review'
                 auto_resolved = False
                 print(f"   🟡 HUMAN REVIEW (low confidence)")
-
         else:
             enforced_resolution['status'] = 'human_review'
             auto_resolved = False
@@ -239,7 +249,7 @@ async def investigate_ticket(ticket: TicketInput):
         if token_summary:
             print(f"\n💰 Tokens: {token_summary['total_tokens']:,}")
             for call in token_summary['breakdown_by_agent']:
-                print(f"   ├─ {call['agent']:18s} "
+                print(f"   ├─ {call['agent']:22s} "
                       f"{call['prompt_tokens']:>5} in / "
                       f"{call['completion_tokens']:>4} out")
 
@@ -262,9 +272,10 @@ async def investigate_ticket(ticket: TicketInput):
             classification=classification,
             investigation=investigation,
             fraud_assessment=fraud_assessment,
+            evidence_validation=evidence_validation,
             root_cause=root_cause,
-            resolution=enforced_resolution,  # ⬅️ ENFORCED, not AI's original
-            ai_proposed_resolution=ai_proposed_resolution,  # ⬅️ For transparency
+            resolution=enforced_resolution,
+            ai_proposed_resolution=ai_proposed_resolution,
             policy_evaluation=policy_summary,
             confidence_score=confidence,
             auto_resolved=auto_resolved,
@@ -287,7 +298,7 @@ async def investigate_ticket(ticket: TicketInput):
 async def reload_policies():
     policies = policy_engine.reload()
     return {
-        "message": "Policies reloaded (STRICT MODE)",
+        "message": "Policies reloaded (STRICT + EVIDENCE MODE)",
         "version": policies.get("version", "unknown"),
         "strict_mode": True,
         "policy_groups": list(policies.keys())
@@ -316,6 +327,14 @@ async def fraud_check(ticket: TicketInput):
     return await fraud_agent.assess(ticket, classification, investigation)
 
 
+@app.post("/api/evidence-validate")
+async def evidence_validate(ticket: TicketInput):
+    """Standalone endpoint to validate evidence on a ticket (vision call)."""
+    classification = await classifier.classify(ticket)
+    investigation = await investigator.investigate(ticket, classification)
+    return await evidence_agent.validate(ticket, classification, investigation)
+
+
 @app.get("/api/customer/{customer_id}/history")
 async def get_customer_history(customer_id: str):
     return fraud_agent.get_customer_history(customer_id)
@@ -332,7 +351,7 @@ async def get_sample_tickets():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 GrabResolve AI Engine v2.1 (STRICT MODE)")
-    print("📜 Policies are MANDATORY, not advisory")
+    print("🚀 GrabResolve AI Engine v2.3 (STRICT + EVIDENCE)")
+    print("📜 Policies are MANDATORY + Evidence is VALIDATED via Vision")
     print("📡 http://localhost:8000")
     uvicorn.run(app, host="0.0.0.0", port=8000, timeout_keep_alive=200)

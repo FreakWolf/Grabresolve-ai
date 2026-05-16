@@ -1,18 +1,12 @@
-version: "2.2-strict-absolute"
+version: "2.3-strict-evidence"
 last_updated: "2025-01-16"
 mode: "strict"
 
 # ============================================================
 # REFUND LIMITS
-# Precedence (highest → lowest):
-#   1. absolute_block_threshold  (any currency, hard stop)
-#   2. hard_cap                  (per-currency, hard stop)
-#   3. auto_approve_max          (per-currency, caps + human review)
-#   4. monthly / cooldown        (history-based)
+# Precedence: absolute_block > hard_cap > auto_approve > monthly > cooldown
 # ============================================================
 refund_limits:
-  # NEW: Absolute global ceiling - currency-agnostic
-  # ANY refund >= this value is BLOCKED regardless of currency
   absolute_block_threshold: 800
 
   auto_approve_max:
@@ -67,6 +61,32 @@ prohibited_actions:
   - "lawsuit"
   - "criminal charges"
 
+# ============================================================
+# EVIDENCE RULES (NEW v2.3)
+# Governs how vision-validated evidence affects decisions
+# ============================================================
+evidence_rules:
+  evidence_required_categories:
+    - missing_items
+    - damaged_delivery
+    - package_damaged
+    - wrong_delivery
+    - safety_critical
+    - delivery_issue
+
+  min_credibility_for_auto_resolve: 0.6
+
+  contradicting_evidence_action: "block"  # block | escalate
+  suspicious_evidence_action: "escalate"
+
+  no_evidence_max_refund:
+    SGD: 10.00
+    MYR: 30.00
+    IDR: 100000
+    THB: 300
+    PHP: 400
+    VND: 150000
+
 category_rules:
   payment_issue:
     require_payment_data: true
@@ -87,6 +107,21 @@ category_rules:
     auto_resolve_allowed: true
   cancellation_fee:
     auto_resolve_allowed: true
+  missing_items:
+    auto_resolve_allowed: true
+    require_evidence: true
+  damaged_delivery:
+    auto_resolve_allowed: true
+    require_evidence: true
+  package_damaged:
+    auto_resolve_allowed: true
+    require_evidence: true
+  wrong_delivery:
+    auto_resolve_allowed: false
+    require_evidence: true
+  safety_critical:
+    auto_resolve_allowed: false
+    require_evidence: true
 
 country_overrides:
   Singapore:
