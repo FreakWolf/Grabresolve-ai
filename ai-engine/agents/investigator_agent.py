@@ -4,6 +4,7 @@ Investigator Agent - Autonomously queries multiple data sources.
 import json
 
 from llm_client import client
+from token_tracker import get_tracker
 
 
 class InvestigatorAgent:
@@ -59,6 +60,7 @@ class InvestigatorAgent:
         findings = []
         collected_data = {}
 
+        # ----- Trip data checks -----
         if ticket.trip_id:
             trip_data = self._query_trip_data(ticket.trip_id)
             collected_data["trip_data"] = trip_data
@@ -69,19 +71,25 @@ class InvestigatorAgent:
                 actual = trip_data.get("actual_fare", 0)
                 if est and actual and actual > est * 1.2:
                     findings.append(
-                        f"Fare discrepancy detected: Estimated ${est} vs Actual ${actual} ({((actual - est) / est) * 100:.0f}% higher)"
+                        f"Fare discrepancy detected: Estimated ${est} vs Actual ${actual} "
+                        f"({((actual - est) / est) * 100:.0f}% higher)"
                     )
 
                 if trip_data.get("route_deviation"):
                     findings.append(
-                        f"Route deviation detected: Estimated {trip_data.get('estimated_distance_km', 0)}km vs Actual {trip_data.get('actual_distance_km', 0)}km"
+                        f"Route deviation detected: Estimated "
+                        f"{trip_data.get('estimated_distance_km', 0)}km vs Actual "
+                        f"{trip_data.get('actual_distance_km', 0)}km"
                     )
 
                 if trip_data.get("payment_status") == "double_charged":
                     findings.append(
-                        f"Double charge confirmed: {len(trip_data.get('transactions', []))} transactions found for same trip"
+                        f"Double charge confirmed: "
+                        f"{len(trip_data.get('transactions', []))} transactions "
+                        f"found for same trip"
                     )
 
+        # ----- Driver data checks -----
         if ticket.driver_id:
             driver_data = self._query_driver_data(ticket.driver_id)
             collected_data["driver_data"] = driver_data
@@ -91,21 +99,25 @@ class InvestigatorAgent:
                 complaints = driver_data.get("complaints_last_30_days", 0)
                 if complaints > 5:
                     findings.append(
-                        f"Driver has {complaints} complaints in last 30 days (above threshold)"
+                        f"Driver has {complaints} complaints in last 30 days "
+                        f"(above threshold)"
                     )
 
                 deviations = driver_data.get("route_deviation_count", 0)
                 if deviations > 10:
                     findings.append(
-                        f"Driver has {deviations} route deviations on record (pattern detected)"
+                        f"Driver has {deviations} route deviations on record "
+                        f"(pattern detected)"
                     )
 
                 rating = driver_data.get("rating", 5.0)
                 if rating < 4.0:
                     findings.append(
-                        f"Driver rating is {rating}/5.0 (below acceptable threshold)"
+                        f"Driver rating is {rating}/5.0 "
+                        f"(below acceptable threshold)"
                     )
 
+        # ----- Payment + GPS data checks -----
         if ticket.trip_id:
             collected_data["payment_data"] = self._query_payment_data(ticket.trip_id)
             data_sources.append("GrabPay Transaction Records")
@@ -116,10 +128,15 @@ class InvestigatorAgent:
 
             if gps_data.get("deviation_detected"):
                 findings.append(
-                    f"GPS confirms route deviation: {gps_data.get('deviation_percentage', 0):.1f}% longer than optimal route"
+                    f"GPS confirms route deviation: "
+                    f"{gps_data.get('deviation_percentage', 0):.1f}% "
+                    f"longer than optimal route"
                 )
 
-        llm_analysis = await self._llm_analyze(ticket, classification, collected_data, findings)
+        # ----- LLM analysis -----
+        llm_analysis = await self._llm_analyze(
+            ticket, classification, collected_data, findings
+        )
 
         return {
             "data_sources": data_sources,
@@ -130,7 +147,10 @@ class InvestigatorAgent:
         }
 
     async def _llm_analyze(self, ticket, classification, collected_data, findings) -> str:
-        system_prompt = "You are an expert Grab investigator. Provide concise and actionable analysis."
+        system_prompt = (
+            "You are an expert Grab investigator. "
+            "Provide concise and actionable analysis in 3-4 sentences total."
+        )
         user_prompt = f"""
 TICKET: {ticket.subject}
 DESCRIPTION: {ticket.description}
@@ -138,14 +158,31 @@ CLASSIFICATION: {json.dumps(classification, indent=2)}
 DATA COLLECTED: {json.dumps(collected_data, indent=2, default=str)}
 FINDINGS SO FAR: {json.dumps(findings, indent=2)}
 
-Provide:
-1. A brief analysis summary in 2-3 sentences
-2. Additional patterns or red flags
-3. Recommended next steps
+Briefly provide:
+1. Analysis summary (1-2 sentences)
+2. Key red flags if any
+3. Recommended next step
 """
         try:
-            return client.chat_text(system_prompt, user_prompt, max_tokens=300, reasoning_effort="medium")
+            # ⬇️ CHANGED: removed reasoning_effort="medium", kept max_tokens=300
+            result = client.chat_text(
+                system_prompt, user_prompt,
+                max_tokens=300
+            )
+
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker:
+                tracker.add_call("investigator", client.last_usage)
+
+            return result
+
         except Exception as exc:
+            # ⬇️ ADDED: Track tokens even on failure
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker and client.last_usage:
+                tracker.add_call("investigator_failed", client.last_usage)
+
+            print(f"Investigator LLM error: {exc}")
             return (
                 "AI operational reasoning completed using fallback analysis mode."
             )

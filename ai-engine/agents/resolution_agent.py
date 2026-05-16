@@ -4,13 +4,15 @@ Resolution Agent - Generates resolution recommendations.
 import json
 
 from llm_client import client
+from token_tracker import get_tracker
 
 
 class ResolutionAgent:
-    async def resolve(self, ticket, classification: dict, investigation: dict, root_cause: dict) -> dict:
+    async def resolve(self, ticket, classification: dict,
+                      investigation: dict, root_cause: dict) -> dict:
         system_prompt = (
             "You are a Grab resolution specialist. "
-            "Return strict JSON only."
+            "Return strict JSON only - no markdown, no explanations."
         )
         user_prompt = f"""
 Based on the following case details, propose a fair and practical resolution.
@@ -46,8 +48,25 @@ Respond in this exact JSON format:
 """
 
         try:
-            return client.json_response(system_prompt, user_prompt, max_tokens=1200, reasoning_effort="medium")
+            # ⬇️ CHANGED: max_tokens 1200 → 800, removed reasoning_effort="medium"
+            result = client.json_response(
+                system_prompt, user_prompt,
+                max_tokens=800
+            )
+
+            # Track token usage on success
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker:
+                tracker.add_call("resolution", client.last_usage)
+
+            return result
+
         except Exception as exc:
+            # ⬇️ ADDED: Track tokens even on failure
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker and client.last_usage:
+                tracker.add_call("resolution_failed", client.last_usage)
+
             print(f"Resolution error: {exc}")
             return {
                 "action": "Escalate to senior agent for manual review",

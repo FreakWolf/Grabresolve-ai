@@ -6,6 +6,10 @@ const app = express();
 const PORT = 5000;
 const AI_ENGINE = 'http://localhost:8000';
 const LIVE_ANALYTICS_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// ⬇️ ADDED: Centralized timeout config (3 minutes)
+const AI_REQUEST_TIMEOUT_MS = 180000;
+
 const RESOLVED_STATUSES = new Set([
     'auto_resolved',
     'human_review',
@@ -54,27 +58,21 @@ function safeDate(raw) {
 
 function analyticsFromState() {
     const statusCounts = {
-        open: 0,
-        investigating: 0,
-        auto_resolved: 0,
-        human_review: 0,
-        escalated: 0,
-        resolved: 0,
-        error: 0
+        open: 0, investigating: 0, auto_resolved: 0,
+        human_review: 0, escalated: 0, resolved: 0, error: 0
     };
     const categoryMap = new Map();
     const countryMap = new Map();
     const hourlyMap = new Map();
     const resolutionBreakdown = {
-        auto_resolved: 0,
-        human_reviewed: 0,
-        escalated: 0
+        auto_resolved: 0, human_reviewed: 0, escalated: 0
     };
 
     let processed = 0;
     let evidenceTrailCount = 0;
     let totalResolutionSeconds = 0;
-    const now = Date.now();
+    let totalTokensUsed = 0;  // ⬅️ ADDED
+    let ticketsWithTokens = 0; // ⬅️ ADDED
 
     ticketsDB.forEach(ticket => {
         const status = ticketStatus(ticket);
@@ -86,23 +84,16 @@ function analyticsFromState() {
         const resolvedStatus = resolutionStatus(ticket, investigation);
         const timestamp = safeDate(ticket.resolved_at || ticket.created_at);
         const hour = `${String(timestamp.getHours()).padStart(2, '0')}:00`;
-        const withinWindow = now - timestamp.getTime() <= LIVE_ANALYTICS_WINDOW_MS;
 
         if (!hourlyMap.has(hour)) {
             hourlyMap.set(hour, { hour, tickets: 0, resolved: 0 });
         }
         const hourlyRow = hourlyMap.get(hour);
         hourlyRow.tickets += 1;
-        if (RESOLVED_STATUSES.has(status)) {
-            hourlyRow.resolved += 1;
-        }
+        if (RESOLVED_STATUSES.has(status)) hourlyRow.resolved += 1;
 
         if (!categoryMap.has(category)) {
-            categoryMap.set(category, {
-                category,
-                count: 0,
-                autoResolvedCount: 0
-            });
+            categoryMap.set(category, { category, count: 0, autoResolvedCount: 0 });
         }
         const categoryRow = categoryMap.get(category);
         categoryRow.count += 1;
@@ -110,14 +101,10 @@ function analyticsFromState() {
             categoryRow.autoResolvedCount += 1;
         }
 
-        if (!countryMap.has(country)) {
-            countryMap.set(country, { country, count: 0 });
-        }
+        if (!countryMap.has(country)) countryMap.set(country, { country, count: 0 });
         countryMap.get(country).count += 1;
 
-        if (RESOLVED_STATUSES.has(status)) {
-            processed += 1;
-        }
+        if (RESOLVED_STATUSES.has(status)) processed += 1;
 
         if (resolvedStatus === 'auto_resolved' || status === 'resolved') {
             resolutionBreakdown.auto_resolved += 1;
@@ -127,16 +114,13 @@ function analyticsFromState() {
             resolutionBreakdown.escalated += 1;
         }
 
-        if (investigation?.evidence?.length) {
-            evidenceTrailCount += 1;
-        }
+        if (investigation?.evidence?.length) evidenceTrailCount += 1;
+        if (ticket.processing_time) totalResolutionSeconds += asNumber(ticket.processing_time);
 
-        if (ticket.processing_time) {
-            totalResolutionSeconds += asNumber(ticket.processing_time);
-        }
-
-        if (withinWindow && !hourlyMap.has(hour)) {
-            hourlyMap.set(hour, { hour, tickets: 0, resolved: 0 });
+        // ⬇️ ADDED: Aggregate token usage
+        if (investigation?.token_usage?.total_tokens) {
+            totalTokensUsed += investigation.token_usage.total_tokens;
+            ticketsWithTokens += 1;
         }
     });
 
@@ -160,29 +144,29 @@ function analyticsFromState() {
         ai_analytics: {
             overview: {
                 auto_resolve_rate: totalTickets > 0
-                    ? round((autoResolvedCount / totalTickets) * 100, 1)
-                    : 0,
+                    ? round((autoResolvedCount / totalTickets) * 100, 1) : 0,
                 avg_resolution_time_sec: processed > 0
-                    ? round(totalResolutionSeconds / processed, 1)
-                    : 0,
+                    ? round(totalResolutionSeconds / processed, 1) : 0,
                 sla_compliance_rate: processed > 0
-                    ? round(((processed - escalatedCount) / processed) * 100, 1)
-                    : 0,
+                    ? round(((processed - escalatedCount) / processed) * 100, 1) : 0,
                 total_tickets_today: totalTickets,
                 processed_tickets: processed,
                 auto_resolved: autoResolvedCount,
                 human_reviewed: humanReviewedCount,
                 escalated: escalatedCount,
                 investigating: statusCounts.investigating,
-                open: statusCounts.open
+                open: statusCounts.open,
+                // ⬇️ ADDED: Token metrics
+                total_tokens_used: totalTokensUsed,
+                avg_tokens_per_ticket: ticketsWithTokens > 0
+                    ? Math.round(totalTokensUsed / ticketsWithTokens) : 0
             },
             by_category: Array.from(categoryMap.values())
                 .map(row => ({
                     category: row.category,
                     count: row.count,
                     auto_rate: row.count > 0
-                        ? round((row.autoResolvedCount / row.count) * 100, 1)
-                        : 0
+                        ? round((row.autoResolvedCount / row.count) * 100, 1) : 0
                 }))
                 .sort((a, b) => b.count - a.count),
             by_country: Array.from(countryMap.values()).sort((a, b) => b.count - a.count),
@@ -190,11 +174,9 @@ function analyticsFromState() {
             resolution_breakdown: resolutionBreakdown,
             responsible_ai: {
                 evidence_trail_rate: processed > 0
-                    ? round((evidenceTrailCount / processed) * 100, 1)
-                    : 0,
+                    ? round((evidenceTrailCount / processed) * 100, 1) : 0,
                 human_review_rate: processed > 0
-                    ? round((humanReviewedCount / processed) * 100, 1)
-                    : 0,
+                    ? round((humanReviewedCount / processed) * 100, 1) : 0,
                 pii_masking_compliance: 100,
                 bias_incidents_detected: 0
             }
@@ -211,13 +193,8 @@ function systemicIssuesFromState() {
         const key = `${region}::${category}`;
 
         if (!acc[key]) {
-            acc[key] = {
-                region,
-                category,
-                affected_tickets: 0
-            };
+            acc[key] = { region, category, affected_tickets: 0 };
         }
-
         acc[key].affected_tickets += 1;
         return acc;
     }, {});
@@ -264,9 +241,7 @@ app.get('/api/tickets/:id', (req, res) => {
 
 app.post('/api/tickets', (req, res) => {
     const existing = ticketsDB.find(t => t.ticket_id === req.body.ticket_id);
-    if (existing) {
-        return res.json(existing);
-    }
+    if (existing) return res.json(existing);
 
     const ticket = {
         ...req.body,
@@ -282,9 +257,7 @@ app.post('/api/tickets', (req, res) => {
 app.post('/api/tickets/:id/investigate', async (req, res) => {
     try {
         const ticket = ticketsDB.find(t => t.ticket_id === req.params.id);
-        if (!ticket) {
-            return res.status(404).json({ error: 'Ticket not found' });
-        }
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
 
         ticket.status = 'investigating';
         console.log(`\nSending ${ticket.ticket_id} to AI Engine...`);
@@ -307,7 +280,7 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
                 city: ticket.city,
                 priority: ticket.priority
             },
-            { timeout: 60000 }
+            { timeout: AI_REQUEST_TIMEOUT_MS }  // ⬅️ CHANGED: 60000 → 180000
         );
 
         const result = aiResponse.data;
@@ -315,6 +288,7 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
         ticket.confidence_score = result.confidence_score;
         ticket.auto_resolved = ticket.status === 'auto_resolved';
         ticket.processing_time = result.processing_time_seconds;
+        ticket.token_usage = result.token_usage;  // ⬅️ ADDED
         ticket.resolved_at = new Date().toISOString();
 
         investigationsDB = investigationsDB.filter(i => i.ticket_id !== ticket.ticket_id);
@@ -325,6 +299,10 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
         });
 
         console.log(`${ticket.ticket_id} -> ${ticket.status}`);
+        if (result.token_usage) {
+            console.log(`   💰 Tokens: ${result.token_usage.total_tokens} ` +
+                        `(${result.token_usage.calls_made} calls)`);
+        }
 
         res.json({
             message: 'Investigation complete',
@@ -334,9 +312,7 @@ app.post('/api/tickets/:id/investigate', async (req, res) => {
     } catch (err) {
         console.error('Investigation error:', err.message);
         const ticket = ticketsDB.find(t => t.ticket_id === req.params.id);
-        if (ticket) {
-            ticket.status = 'error';
-        }
+        if (ticket) ticket.status = 'error';
 
         res.status(500).json({
             error: 'Investigation failed',
@@ -369,7 +345,9 @@ app.post('/api/tickets/:id/escalate', (req, res) => {
 
 app.post('/api/seed', async (req, res) => {
     try {
-        const response = await axios.get(`${AI_ENGINE}/api/sample-tickets`);
+        const response = await axios.get(`${AI_ENGINE}/api/sample-tickets`, {
+            timeout: 10000  // ⬅️ ADDED
+        });
         const sampleTickets = response.data;
 
         ticketsDB = [];
@@ -422,7 +400,7 @@ app.post('/api/investigate-all', async (req, res) => {
                     city: ticket.city,
                     priority: ticket.priority
                 },
-                { timeout: 60000 }
+                { timeout: AI_REQUEST_TIMEOUT_MS }  // ⬅️ CHANGED
             );
 
             const result = aiResponse.data;
@@ -430,6 +408,7 @@ app.post('/api/investigate-all', async (req, res) => {
             ticket.confidence_score = result.confidence_score;
             ticket.auto_resolved = ticket.status === 'auto_resolved';
             ticket.processing_time = result.processing_time_seconds;
+            ticket.token_usage = result.token_usage;  // ⬅️ ADDED
             ticket.resolved_at = new Date().toISOString();
 
             investigationsDB = investigationsDB.filter(i => i.ticket_id !== ticket.ticket_id);
@@ -443,6 +422,7 @@ app.post('/api/investigate-all', async (req, res) => {
                 ticket_id: ticket.ticket_id,
                 status: ticket.status,
                 confidence: result.confidence_score,
+                tokens_used: result.token_usage?.total_tokens || 0,  // ⬅️ ADDED
                 success: true
             });
         } catch (err) {
@@ -456,10 +436,14 @@ app.post('/api/investigate-all', async (req, res) => {
         }
     }
 
+    // ⬇️ ADDED: Batch token summary
+    const totalTokens = results.reduce((sum, r) => sum + (r.tokens_used || 0), 0);
+
     res.json({
         message: `Processed ${openTickets.length} tickets`,
         succeeded: results.filter(r => r.success).length,
         failed: results.filter(r => !r.success).length,
+        total_tokens_used: totalTokens,  // ⬅️ ADDED
         results
     });
 });
@@ -483,13 +467,29 @@ app.get('/api/analytics/systemic', (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
+// ⬇️ ADDED: New endpoint for per-ticket token lookup
+app.get('/api/tickets/:id/tokens', (req, res) => {
+    const investigation = investigationFor(req.params.id);
+    if (!investigation || !investigation.token_usage) {
+        return res.status(404).json({ error: 'No token data for this ticket' });
+    }
+    res.json(investigation.token_usage);
+});
+
+// ⬇️ CHANGED: Capture server reference to set timeouts
+const server = app.listen(PORT, () => {
     console.log('');
     console.log('='.repeat(50));
     console.log('GrabResolve Backend Started (No MongoDB!)');
     console.log('='.repeat(50));
     console.log(`Server: http://localhost:${PORT}`);
     console.log(`AI Engine: ${AI_ENGINE}`);
+    console.log(`AI Request Timeout: ${AI_REQUEST_TIMEOUT_MS / 1000}s`);
     console.log('='.repeat(50));
     console.log('');
 });
+
+// ⬇️ ADDED: Express server-level timeouts
+server.timeout = 200000;          // 200s overall
+server.keepAliveTimeout = 200000;
+server.headersTimeout = 210000;   // must exceed keepAliveTimeout

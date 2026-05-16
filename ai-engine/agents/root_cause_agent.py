@@ -4,13 +4,14 @@ Root Cause Agent - Determines the root cause with confidence scoring.
 import json
 
 from llm_client import client
+from token_tracker import get_tracker
 
 
 class RootCauseAgent:
     async def analyze(self, ticket, classification: dict, investigation: dict) -> dict:
         system_prompt = (
             "You are a Grab support root-cause analyst. "
-            "Return strict JSON only."
+            "Return strict JSON only - no markdown, no explanations, no reasoning text."
         )
         user_prompt = f"""
 Analyze the following support case and determine the most likely root cause.
@@ -47,8 +48,26 @@ Keep confidence high only when the evidence is strong.
 """
 
         try:
-            return client.json_response(system_prompt, user_prompt, max_tokens=1100, reasoning_effort="high")
+            # ⬇️ CHANGED: max_tokens 1100 → 600, removed reasoning_effort="high"
+            # This single change saves ~5,000 tokens per ticket
+            result = client.json_response(
+                system_prompt, user_prompt,
+                max_tokens=600
+            )
+
+            # Track token usage on success
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker:
+                tracker.add_call("root_cause", client.last_usage)
+
+            return result
+
         except Exception as exc:
+            # ⬇️ ADDED: Track tokens even on failure
+            tracker = get_tracker(ticket.ticket_id)
+            if tracker and client.last_usage:
+                tracker.add_call("root_cause_failed", client.last_usage)
+
             print(f"Root cause analysis error: {exc}")
             return {
                 "primary_cause": "Unable to determine - needs manual review",

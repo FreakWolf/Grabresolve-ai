@@ -1,5 +1,6 @@
 """
 Prediction Agent - Predicts SLA breaches and systemic issues.
+This agent is rule-based and does not call the LLM (no token usage).
 """
 
 
@@ -7,11 +8,14 @@ class PredictionAgent:
     async def predict_sla_breach(self, ticket) -> dict:
         risk_score = 0.3
 
-        if hasattr(ticket, "priority"):
-            if ticket.category in ["payment_issue", "double_charge"]:
-                risk_score += 0.3
-            if ticket.channel == "app":
-                risk_score += 0.1
+        # ⬇️ FIXED: Original checked hasattr(ticket, "priority") but used ticket.category
+        if hasattr(ticket, "category") and ticket.category in [
+            "payment_issue", "double_charge"
+        ]:
+            risk_score += 0.3
+
+        if hasattr(ticket, "channel") and ticket.channel == "app":
+            risk_score += 0.1
 
         risk_score = min(risk_score, 1.0)
 

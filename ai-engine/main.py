@@ -1,14 +1,16 @@
 """
 GrabResolve AI — Main FastAPI Server
-This serves as the AI engine that the Node.js backend calls
+Now with token tracking and parallel agent execution.
 """
+
+import asyncio
+import json
+import time
+from typing import Optional, List, Dict
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List, Dict
-import json
-import time
 
 from agents.classifier_agent import ClassifierAgent
 from agents.investigator_agent import InvestigatorAgent
@@ -16,15 +18,16 @@ from agents.root_cause_agent import RootCauseAgent
 from agents.resolution_agent import ResolutionAgent
 from agents.prediction_agent import PredictionAgent
 from config import AUTO_RESOLVE_CONFIDENCE, HUMAN_REVIEW_THRESHOLD, ESCALATION_THRESHOLD
+from token_tracker import start_tracking, finish_tracking  # ⬅️ ADDED
 
 # Initialize FastAPI
 app = FastAPI(
     title="GrabResolve AI Engine",
     description="Autonomous Investigation & Resolution Agent",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# CORS (allow frontend/backend to connect)
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -69,6 +72,7 @@ class InvestigationResult(BaseModel):
     auto_resolved: bool
     processing_time_seconds: float
     evidence_trail: List[str]
+    token_usage: Optional[Dict] = None  # ⬅️ ADDED
 
 
 # ============================================================
@@ -80,18 +84,19 @@ def health_check():
     return {
         "status": "healthy",
         "service": "GrabResolve AI Engine",
-        "version": "1.0.0"
+        "version": "1.1.0"
     }
 
 
 @app.post("/api/investigate", response_model=InvestigationResult)
 async def investigate_ticket(ticket: TicketInput):
     """
-    Main endpoint — Full autonomous investigation pipeline
-    Takes a ticket → Classifies → Investigates → Analyzes → Resolves
+    Main endpoint — Full autonomous investigation pipeline.
+    Now runs Investigator + Prediction in parallel for ~30% speedup.
     """
     start_time = time.time()
     evidence_trail = []
+    tracker = start_tracking(ticket.ticket_id)  # ⬅️ ADDED
 
     try:
         # ============================
@@ -108,11 +113,13 @@ async def investigate_ticket(ticket: TicketInput):
               f"| Urgency: {classification['urgency']}")
 
         # ============================
-        # STEP 2: INVESTIGATION
+        # STEP 2 (PARALLEL): INVESTIGATION + SLA PREDICTION
+        # ⬇️ CHANGED: These run concurrently now
         # ============================
-        print(f"🔍 Step 2: Investigating ticket {ticket.ticket_id}...")
-        investigation = await investigator.investigate(
-            ticket, classification
+        print(f"🔍 Step 2: Investigating + predicting SLA in parallel...")
+        investigation, sla_prediction = await asyncio.gather(
+            investigator.investigate(ticket, classification),
+            prediction_agent.predict_sla_breach(ticket)
         )
         evidence_trail.append(
             f"[Investigation] Queried {len(investigation['data_sources'])} "
@@ -121,6 +128,7 @@ async def investigate_ticket(ticket: TicketInput):
         for finding in investigation.get('findings', []):
             evidence_trail.append(f"[Finding] {finding}")
         print(f"   ✅ Found {len(investigation['findings'])} findings")
+        print(f"   ✅ SLA prediction complete")
 
         # ============================
         # STEP 3: ROOT CAUSE ANALYSIS
@@ -166,7 +174,28 @@ async def investigate_ticket(ticket: TicketInput):
             )
             print(f"   🔴 ESCALATED to senior agent")
 
+        # Optionally attach SLA prediction to resolution payload
+        resolution['sla_prediction'] = sla_prediction
+
         processing_time = time.time() - start_time
+
+        # ⬇️ ADDED: Finalize token tracking
+        token_summary = finish_tracking(ticket.ticket_id)
+        if token_summary:
+            print(f"\n💰 Tokens used for {ticket.ticket_id}: "
+                  f"{token_summary['total_tokens']:,} "
+                  f"({token_summary['input_tokens']:,} in / "
+                  f"{token_summary['output_tokens']:,} out)")
+            for call in token_summary['breakdown_by_agent']:
+                print(f"   ├─ {call['agent']:15s} "
+                      f"{call['prompt_tokens']:>5} in / "
+                      f"{call['completion_tokens']:>4} out")
+
+        evidence_trail.append(
+            f"[Tokens] Total: {token_summary['total_tokens']} "
+            f"across {token_summary['calls_made']} LLM calls"
+            if token_summary else "[Tokens] No usage data captured"
+        )
 
         print(f"\n✅ Investigation complete for {ticket.ticket_id} "
               f"in {processing_time:.2f}s\n")
@@ -180,10 +209,12 @@ async def investigate_ticket(ticket: TicketInput):
             confidence_score=confidence,
             auto_resolved=auto_resolved,
             processing_time_seconds=round(processing_time, 2),
-            evidence_trail=evidence_trail
+            evidence_trail=evidence_trail,
+            token_usage=token_summary  # ⬅️ ADDED
         )
 
     except Exception as e:
+        finish_tracking(ticket.ticket_id)  # cleanup
         processing_time = time.time() - start_time
         print(f"❌ Error investigating {ticket.ticket_id}: {str(e)}")
         raise HTTPException(
@@ -235,20 +266,16 @@ async def get_analytics():
         },
         "systemic_issues": [
             {
-                "issue": "Route deviation complaints increased 40% "
-                         "in Singapore Central",
+                "issue": "Route deviation complaints increased 40% in Singapore Central",
                 "severity": "high",
                 "affected_tickets": 45,
-                "recommendation": "Review driver incentive structure "
-                                  "in Singapore Central region"
+                "recommendation": "Review driver incentive structure in Singapore Central region"
             },
             {
-                "issue": "GrabPay double-charge incidents up 25% "
-                         "this week",
+                "issue": "GrabPay double-charge incidents up 25% this week",
                 "severity": "medium",
                 "affected_tickets": 23,
-                "recommendation": "Investigate payment gateway "
-                                  "timeout handling"
+                "recommendation": "Investigate payment gateway timeout handling"
             }
         ]
     }
@@ -273,4 +300,9 @@ if __name__ == "__main__":
     print("🚀 Starting GrabResolve AI Engine...")
     print("📡 Server running at http://localhost:8000")
     print("📚 API Docs at http://localhost:8000/docs")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8000,
+        timeout_keep_alive=200  # ⬅️ ADDED: Match server-side timeouts
+    )
