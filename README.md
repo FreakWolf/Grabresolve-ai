@@ -84,6 +84,12 @@ graph TD
     E --> G
 ```
 
+The project employs a **layered architecture**, separating concerns into:
+*   **Presentation Layer (Frontend):** React application for UI and user interaction.
+*   **Application/API Layer (Backend):** Node.js/Express.js server for APIs, business logic, and orchestrating calls to the AI engine.
+*   **AI/Business Logic Layer (AI Engine):** Python-based `ai-engine` for complex AI computations, data processing, and decision-making.
+
+This design promotes **modularity**, with specialized AI agents (`classifier_agent`, `fraud_agent`, etc.) encapsulating distinct functionalities. Communication is **API-driven**, ensuring loose coupling between layers. The AI is **data-centric**, relying on various JSON datasets for operations, and integrates **Large Language Models (LLMs)** via `llm_client.py` for natural language tasks and advanced reasoning. A `policy_engine.py` ensures **policy enforcement**, aligning AI decisions with predefined rules.
 
 ### Agent Brain (Reasoning Engine):
 - **LLM**: Google Gemini 2.5 Flash — for classification, analysis, and resolution generation
@@ -182,6 +188,13 @@ FINDINGS: 4
 | **Data Store** | In-memory (prototype) | Tickets, investigations, results |
 | **Mock Data** | JSON files | Simulated Grab databases |
 | **Knowledge Base** | Text files | Grab's resolution policies |
+| **Frontend Routing** | React Router DOM | Single-page application navigation |
+| **HTTP Clients** | Axios (Frontend & Backend) | Making HTTP requests |
+| **Environment Variables** | dotenv (Backend) | Managing environment-specific configurations |
+| **Development Tools** | Nodemon (Backend) | Automatic server restarts during development |
+| **Charting** | Recharts (Frontend) | Data visualization |
+| **Styling** | PostCSS, Autoprefixer (Frontend) | Efficient CSS processing |
+| **Language** | TypeScript (Frontend) | Enhanced code quality and maintainability |
 
 ### Libraries:
 - `google-generativeai` — Gemini API client
@@ -189,6 +202,90 @@ FINDINGS: 4
 - `express` + `axios` — Node.js API server
 - `react` + `react-router-dom` — Frontend SPA
 - `recharts` — Analytics charts
+- `dotenv` — Environment variable management
+- `nodemon` — Backend development utility
+- `tailwindcss`, `postcss`, `autoprefixer` — Frontend styling
+
+---
+
+## 📂 Project Structure
+
+```
+.
+├── ai-engine/
+│   ├── __pycache__/
+│   ├── agents/
+│   │   ├── __pycache__/
+│   │   ├── classifier_agent.py
+│   │   ├── evidence_agent.py
+│   │   ├── fraud_agent.py
+│   │   ├── investigator_agent.py
+│   │   ├── prediction_agent.py
+│   │   ├── resolution_agent.py
+│   │   ├── root_cause_agent.py
+│   │   └── vision_agent.py
+│   ├── data/
+│   │   ├── customer_history.json
+│   │   ├── operational_patterns.json
+│   │   ├── sample_drivers.json
+│   │   ├── sample_tickets.json
+│   │   └── sample_trips.json
+│   ├── config.py
+│   ├── list_models.py
+│   ├── llm_client.py
+│   ├── main.py
+│   ├── policies.yaml
+│   ├── policy_engine.py
+│   ├── requirements.txt
+│   ├── test_key.py
+│   └── token_tracker.py
+├── backend/
+│   ├── package-lock.json
+│   ├── package.json
+│   └── server.js
+├── frontend/
+│   ├── public/
+│   │   ├── favicon.ico
+│   │   ├── index.html
+│   │   ├── logo192.png
+│   │   ├── logo512.png
+│   │   ├── manifest.json
+│   │   └── robots.txt
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── ConfidenceMeter.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── EvidenceTrail.jsx
+│   │   │   ├── MetricCard.jsx
+│   │   │   ├── Sidebar.jsx
+│   │   │   └── StatusBadge.jsx
+│   │   ├── pages/
+│   │   │   ├── Analytics.jsx
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── LiveDemo.jsx
+│   │   │   ├── TicketDetail.jsx
+│   │   │   ├── TicketQueue.jsx
+│   │   ├── services/
+│   │   │   └── api.js
+│   │   ├── App.css
+│   │   ├── App.jsx
+│   │   ├── App.test.js
+│   │   ├── index.css
+│   │   ├── index.js
+│   │   ├── logo.svg
+│   │   ├── reportWebVitals.js
+│   │   └── setupTests.js
+│   ├── .gitignore
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── postcss.config.js
+│   └── tailwind.config.js
+├── .gitignore
+├── GrabResolve_AI_Grand_Finale_Styled.pptx
+├── README.md
+├── start.bat
+└── PROJECT_DOCUMENTATION.md
+```
 
 ---
 
@@ -258,3 +355,4 @@ npm start
 
 # 6. Open browser
 # http://localhost:3000
+```
